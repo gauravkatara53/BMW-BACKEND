@@ -1,0 +1,30 @@
+# Ignore all node_modules
+node_modules/
+
+# Ignore build output
+dist/
+build/
+
+# Ignore configuration files
+*.config.js
+*.config.ts
+
+# Ignore log files
+*.log
+
+# Ignore specific files
+src/someFileToIgnore.js
+src/anotherFileToIgnore.ts
+
+# Ignore all markdown files
+*.md
+
+# Ignore all JSON files in a specific directory
+data/*.json
+
+# Ignore all files in the coverage directory
+coverage/
+
+# Ignore specific directories
+public/
+assets/
