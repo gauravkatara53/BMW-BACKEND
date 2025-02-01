@@ -11,6 +11,7 @@ import {
 } from '../controllers/userController.js';
 import { verifyJWT } from '../middlewares/authUserMiddleware.js';
 import { upload } from '../middlewares/multer.js';
+import { allWarehouseController } from '../controllers/warehouseController.js';
 
 const router = Router();
 
@@ -35,5 +36,8 @@ router.route('/update-detail').patch(verifyJWT, updateAccountDetails);
 router
   .route('/update-avatar')
   .patch(verifyJWT, upload.single('avatar'), updateUserAvatar); // Use `.single` for 'avatar' field
+
+//  user side api
+router.route('/home/warehouse').get(allWarehouseController); // Use `.single` for 'avatar' field
 
 export default router;

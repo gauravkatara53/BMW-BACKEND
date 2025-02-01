@@ -35,11 +35,17 @@ const logoutUser = asyncHandler(async (req, res) => {
 
   await logoutUserService(userId); // Call the service to handle logout logic
 
+  // const options = {
+  //   httpOnly: true,
+  //   secure: process.env.NODE_ENV === 'production', // Set to true in production
+  //   sameSite: 'None', // or 'Lax' depending on your needs
+  //   path: '/', // Ensure the cookie is available on the entire site
+  // };
   const options = {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production', // Set to true in production
-    sameSite: 'None', // or 'Lax' depending on your needs
-    path: '/', // Ensure the cookie is available on the entire site
+    httpOnly: false, // Useful for testing and accessing cookies in the frontend
+    secure: false, // Should be false in local development; use true in production
+    sameSite: 'Lax', // Change to 'None' if your frontend and backend are on different domains/ports
+    path: '/', // Available for the entire domain
   };
 
   return res
@@ -114,6 +120,7 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
     .status(200)
     .json(new ApiResponse(200, user, 'Avatar image updated successfully'));
 });
+
 export {
   registerUser,
   loginUser,

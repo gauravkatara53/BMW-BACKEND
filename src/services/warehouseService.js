@@ -354,39 +354,52 @@ const allWarehouse = async ({
   sortOrder,
   category,
   WarehouseStatus,
-  search, // Search parameter
+  search, // Enhanced search parameter
   start, // Start date for filtering
   end, // End date for filtering
+  rentOrSell, // Rent or Sell filter
 }) => {
   // Construct filters based on query parameters
   const filters = {};
   if (category) filters.category = category;
   if (WarehouseStatus) filters.WarehouseStatus = WarehouseStatus;
+  if (rentOrSell) filters.rentOrSell = rentOrSell; // Adding Rent or Sell filter
 
-  // Add search filter (if provided)
+  // Enhanced search logic
   if (search) {
-    const searchRegex = new RegExp(search, 'i'); // Case-insensitive search
-    const isNumeric = !isNaN(Number(search)); // Check if the search term is a number
+    const searchTerms = search.split(' ').filter(Boolean); // Split input into words
 
-    // Add search conditions
-    filters.$or = [
-      { name: { $regex: searchRegex } },
-      { category: { $regex: searchRegex } },
-      { address: { $regex: searchRegex } },
-      { city: { $regex: searchRegex } },
-      { state: { $regex: searchRegex } },
-      { country: { $regex: searchRegex } },
-      ...(isNumeric
-        ? [{ pincode: search }] // Exact match for numeric fields
-        : []),
-    ];
+    filters.$and = searchTerms.map((term) => {
+      const regex = new RegExp(term, 'i'); // Case-insensitive regex
+      return {
+        $or: [
+          { name: { $regex: regex } },
+          { category: { $regex: regex } },
+          { address: { $regex: regex } },
+          { city: { $regex: regex } },
+          { state: { $regex: regex } },
+          { country: { $regex: regex } },
+          { uniqueId: { $regex: regex } },
+          { 'partnerName.name': { $regex: regex } },
+          { 'partnerName.email': { $regex: regex } },
+          { 'partnerName.username': { $regex: regex } },
+          { 'facility.name': { $regex: regex } },
+          { 'nearestFacility.name': { $regex: regex } },
+          { 'nearestFacility.value': { $regex: regex } },
+          { 'rooms.name': { $regex: regex } },
+          ...(isNaN(Number(term))
+            ? []
+            : [{ pincode: Number(term) }, { 'price.amount': Number(term) }]),
+        ],
+      };
+    });
   }
 
   // Add date range filter (if provided)
   if (start || end) {
     filters.createdAt = {};
-    if (start) filters.createdAt.$gte = start;
-    if (end) filters.createdAt.$lte = end;
+    if (start) filters.createdAt.$gte = new Date(start);
+    if (end) filters.createdAt.$lte = new Date(end);
   }
 
   // Calculate pagination
@@ -405,6 +418,9 @@ const allWarehouse = async ({
   return {
     warehouses,
     totalWarehouses,
+    currentPage: page,
+    limit,
+    totalPages: Math.ceil(totalWarehouses / limit),
   };
 };
 
