@@ -6,3 +6,4 @@ const router = Router();
 
 // Secured routes
 router.route('/verify').post(verifyJWT, verifyTransaction);
+export default router;

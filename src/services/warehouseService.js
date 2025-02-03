@@ -94,6 +94,15 @@ const createWarehouseService = async (req) => {
       }
     }
 
+    // for rent only logic
+    const monthlyAmount = price.reduce((total, priceItem) => {
+      return total + (priceItem.isMonthly === true ? priceItem.amount : 0);
+    }, 0);
+
+    // const nonMonthlyPrice = price.reduce((total, priceItem) => {
+    //   return total + (!priceItem.isMonthly ? priceItem.amount : 0);
+    // }, 0);
+
     // Step 6: Calculate Prices and Discounts
     let subTotalPrice = 0;
     let totalDiscount = 0;
@@ -145,13 +154,14 @@ const createWarehouseService = async (req) => {
       nearestFacility,
       areaSqFt,
       rentOrSell,
-      subTotalPrice,
+      subTotalPrice: rentOrSell === 'Sell' ? subTotalPrice : null,
       discount,
-      totalDiscount,
-      totalPrice,
+      totalDiscount: rentOrSell === 'Sell' ? totalDiscount : null,
+      totalPrice: rentOrSell === 'Sell' ? totalPrice : null,
       paymentDueDays,
       partnerName: req.partner._id,
       uniqueId, // Store the unique ID
+      monthlyAmount: rentOrSell === 'Rent' ? monthlyAmount : null,
     };
 
     console.log('Warehouse data to create:', warehouseData);

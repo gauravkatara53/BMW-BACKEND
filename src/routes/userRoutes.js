@@ -11,7 +11,10 @@ import {
 } from '../controllers/userController.js';
 import { verifyJWT } from '../middlewares/authUserMiddleware.js';
 import { upload } from '../middlewares/multer.js';
-import { allWarehouseController } from '../controllers/warehouseController.js';
+import {
+  allWarehouseController,
+  getWarehouseDetailController,
+} from '../controllers/warehouseController.js';
 
 const router = Router();
 
@@ -39,5 +42,6 @@ router
 
 //  user side api
 router.route('/home/warehouse').get(allWarehouseController); // Use `.single` for 'avatar' field
+router.route('/get/warehouse-details/:id').get(getWarehouseDetailController);
 
 export default router;

@@ -10,7 +10,7 @@ const razorpay = new Razorpay({
   key_secret: process.env.RAZORPAY_KEY_SECRET,
 });
 
-const createOrderService = async (warehouseId, duration, user) => {
+const createOrderService = async (warehouseId, duration, user, session) => {
   const warehouse = await Warehouse.findById(warehouseId);
   if (!warehouse) throw new ApiError(404, 'Warehouse not found');
 
@@ -18,31 +18,53 @@ const createOrderService = async (warehouseId, duration, user) => {
     throw new ApiError(400, 'Warehouse is not available');
   }
 
-  // Calculate subtotal and monthly amounts
+  // Calculate the base price and non-monthly price
   const basePrice = warehouse.price.reduce((total, priceItem) => {
-    // If the price item is monthly, multiply by the duration
     return total + (priceItem.isMonthly ? priceItem.amount * duration : 0);
   }, 0);
 
   const nonMonthlyPrice = warehouse.price.reduce((total, priceItem) => {
-    // For non-monthly items, just add the amount as is
     return total + (!priceItem.isMonthly ? priceItem.amount : 0);
   }, 0);
 
-  // Calculate the subTotalPrice by summing basePrice and non-monthlyPrice
-  const subTotalPrice = basePrice + nonMonthlyPrice;
+  const subTotalPriceForRent = basePrice + nonMonthlyPrice;
 
-  // Calculate the total price, subtracting any discount
-  const totalPrice = subTotalPrice - (warehouse.discount?.discountValue || 0);
+  // Calculate total discount
+  // Initialize totalDiscount
+  let totalDiscount = 0;
 
-  // Calculate monthly amount if duration is provided
-  const monthlyAmount = duration ? +(totalPrice / duration).toFixed(2) : 0;
+  // If warehouse.discount is an array, process each discount
+  if (Array.isArray(warehouse.discount)) {
+    totalDiscount = warehouse.discount.reduce((acc, discount) => {
+      if (discount.discountType === 'Percentage') {
+        return acc + (subTotalPriceForRent * discount.discountValue) / 100;
+      } else if (discount.discountType === 'Flat') {
+        return acc + discount.discountValue;
+      }
+      return acc;
+    }, 0);
+  } else if (warehouse.discount && typeof warehouse.discount === 'object') {
+    // If warehouse.discount is a single object, apply it directly
+    if (warehouse.discount.discountType === 'Percentage') {
+      totalDiscount =
+        (subTotalPriceForRent * warehouse.discount.discountValue) / 100;
+    } else if (warehouse.discount.discountType === 'Flat') {
+      totalDiscount = warehouse.discount.discountValue;
+    }
+  }
 
-  // Generate monthly payment breakdown
-  const monthlyPayment = [];
-  const startDate = new Date(); // Current date (e.g., January 26, 2025)
+  // Ensure total discount does not exceed subtotal
+  totalDiscount = Math.min(totalDiscount, subTotalPriceForRent);
 
-  // Array of ordinal labels for months: 'First', 'Second', 'Third', etc.
+  // Apply discount to total price
+  const totalPriceForRent = subTotalPriceForRent - totalDiscount;
+
+  // Apply discount to the rent or sell total price (logic is not correct) for Rent
+
+  const totalPrice =
+    warehouse.rentOrSell === 'Rent' ? totalPriceForRent : warehouse.totalPrice;
+
+  // Generate monthly payment breakdown for rent orders
   const ordinalMonths = [
     'First',
     'Second',
@@ -57,30 +79,37 @@ const createOrderService = async (warehouseId, duration, user) => {
     'Eleventh',
     'Twelfth',
   ];
+  let monthlyPayment = [];
+  if (duration) {
+    const monthlyAmount = parseFloat((totalPrice / duration).toFixed(2));
+    const startDate = new Date();
 
-  for (let i = 0; i < duration; i++) {
-    monthlyPayment.push({
-      month: ordinalMonths[i], // Use ordinal month names
-      amount: monthlyAmount, // The calculated monthly amount
-      paymentStatus: 'Unpaid', // Default status for payments
-    });
+    for (let i = 0; i < duration; i++) {
+      const paymentDate = new Date(startDate);
+      paymentDate.setMonth(paymentDate.getMonth() + i);
+
+      monthlyPayment.push({
+        month: ordinalMonths[i], // Use ordinal month names
+        amount: monthlyAmount,
+        paymentStatus: 'Unpaid',
+      });
+    }
   }
-
-  console.log(monthlyPayment); // Debugging line to check payment breakdown
 
   const uniqueOrderId = `ORD-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 
+  // Create the order
   const order = await Order.create([
     {
       orderId: uniqueOrderId,
       orderStatus: 'Pending',
       orderDate: new Date(),
       duration,
-      startDate,
+      startDate: new Date(),
       endDate: duration
-        ? new Date(startDate.setMonth(startDate.getMonth() + duration))
+        ? new Date().setMonth(new Date().getMonth() + duration)
         : null,
-      subTotalPrice,
+      subTotalPrice: totalPriceForRent,
       totalDiscount: warehouse.discount?.discountValue || 0,
       totalPrice,
       totalPaid: 0,
@@ -89,21 +118,21 @@ const createOrderService = async (warehouseId, duration, user) => {
       customerDetails: user._id,
       partnerDetails: warehouse.partnerName,
       monthlyPayment,
-      monthlyAmount: monthlyAmount,
+      monthlyAmount: duration
+        ? parseFloat((totalPrice / duration).toFixed(2))
+        : 0,
       paymentDate: null,
     },
   ]);
 
   const options = {
-    amount:
-      (warehouse.rentOrSell === 'Rent' ? monthlyAmount : totalPrice) * 100, // Use monthlyAmount for rent, totalPrice for sell
+    amount: totalPrice * 100, // Convert to paise (INR)
     currency: 'INR',
     receipt: `receipt_${Date.now()}`,
   };
 
   const razorpayOrder = await razorpay.orders.create(options);
-  const transactionAmount =
-    warehouse.rentOrSell === 'Rent' ? monthlyAmount : totalPrice;
+  const transactionAmount = totalPrice;
   const transaction = await Transaction.create([
     {
       warehouseId,

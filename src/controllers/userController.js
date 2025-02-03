@@ -62,9 +62,15 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
   const { accessToken, newRefreshToken } =
     await refreshAccessTokenService(incomingRefreshToken);
 
+  // const options = {
+  //   httpOnly: true,
+  //   secure: true, // Ensure it's true in production
+  // };
   const options = {
-    httpOnly: true,
-    secure: true, // Ensure it's true in production
+    httpOnly: false,
+    secure: false, // Local testing
+    sameSite: 'Lax',
+    path: '/',
   };
 
   return res
