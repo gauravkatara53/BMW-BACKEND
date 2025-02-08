@@ -26,7 +26,6 @@ const createWarehouseService = async (req) => {
       nearestFacility,
       areaSqFt,
       rentOrSell,
-      discount,
       paymentDueDays,
     } = req.body;
 
@@ -46,8 +45,6 @@ const createWarehouseService = async (req) => {
       .createHash('md5')
       .update(uniqueString)
       .digest('hex');
-
-    console.log('Generated Unique ID:', uniqueId);
 
     // Step 2: Check for existing warehouse
     const existingWarehouse = await Warehouse.findOne({ uniqueId });
@@ -74,75 +71,61 @@ const createWarehouseService = async (req) => {
       }
     });
 
-    // Step 4: Validate Discount
-    if (!discount || !discount.discountType || !discount.discountValue) {
-      console.error('Discount validation failed:', discount);
-      throw new ApiError(400, 'Invalid discount data.');
-    }
-
     // Step 5: Validate Rent-specific Rules
-    if (rentOrSell === 'Rent') {
-      if (!paymentDueDays || paymentDueDays <= 30) {
-        console.error(
-          'Payment due days validation failed for rent:',
-          paymentDueDays
-        );
-        throw new ApiError(
-          400,
-          'Payment due days must be more than 30 for rent.'
-        );
-      }
+    if (rentOrSell === 'Rent' && (!paymentDueDays || paymentDueDays <= 30)) {
+      console.error(
+        'Payment due days validation failed for rent:',
+        paymentDueDays
+      );
+      throw new ApiError(
+        400,
+        'Payment due days must be more than 30 for rent.'
+      );
     }
 
-    // for rent only logic
-    const monthlyAmount = price.reduce((total, priceItem) => {
-      return total + (priceItem.isMonthly === true ? priceItem.amount : 0);
-    }, 0);
+    // Step 6: Calculate Prices
+    let monthlyAmount = 0;
+    let total = 0;
 
-    // const nonMonthlyPrice = price.reduce((total, priceItem) => {
-    //   return total + (!priceItem.isMonthly ? priceItem.amount : 0);
-    // }, 0);
+    if (rentOrSell === 'Rent') {
+      monthlyAmount = price.reduce(
+        (sum, priceItem) => sum + (priceItem.isMonthly ? priceItem.amount : 0),
+        0
+      );
+    } else {
+      total = price.reduce((sum, priceItem) => sum + priceItem.amount, 0);
+    }
+    let oneTimeAmount = 0;
+    if (rentOrSell === 'Rent') {
+      oneTimeAmount = price.reduce(
+        (sum, priceItem) => sum + (!priceItem.isMonthly ? priceItem.amount : 0),
+        0
+      );
+    }
 
-    // Step 6: Calculate Prices and Discounts
-    let subTotalPrice = 0;
+    let subTotalPrice =
+      rentOrSell === 'Rent' ? monthlyAmount + oneTimeAmount : total;
     let totalDiscount = 0;
-
-    const calculatedPrice = price.map((item) => {
-      let discountAmount = 0;
-      if (discount.discountType === 'Percentage') {
-        discountAmount = (item.amount * discount.discountValue) / 100;
-      } else if (discount.discountType === 'Flat') {
-        discountAmount = discount.discountValue;
-      }
-
-      totalDiscount += discountAmount;
-      subTotalPrice += item.amount;
-
-      return {
-        ...item,
-        discount: discountAmount,
-      };
-    });
-
-    const totalPrice = subTotalPrice - totalDiscount;
+    let totalPrice = subTotalPrice - totalDiscount;
 
     console.log('Prices calculated:', {
       subTotalPrice,
       totalDiscount,
       totalPrice,
-      calculatedPrice,
     });
 
     // Step 7: Create Warehouse
+    const partnerId = req.partner?._id || null;
+
     const warehouseData = {
       name,
       about,
       category,
-      price: calculatedPrice,
+      price,
       WarehouseStatus: 'Available',
       location: {
         type: 'Point',
-        coordinates: coordinates,
+        coordinates,
       },
       address,
       city,
@@ -154,14 +137,14 @@ const createWarehouseService = async (req) => {
       nearestFacility,
       areaSqFt,
       rentOrSell,
-      subTotalPrice: rentOrSell === 'Sell' ? subTotalPrice : null,
-      discount,
-      totalDiscount: rentOrSell === 'Sell' ? totalDiscount : null,
-      totalPrice: rentOrSell === 'Sell' ? totalPrice : null,
+      subTotalPrice,
+      totalDiscount,
+      totalPrice,
       paymentDueDays,
-      partnerName: req.partner._id,
-      uniqueId, // Store the unique ID
+      partnerName: partnerId,
+      uniqueId,
       monthlyAmount: rentOrSell === 'Rent' ? monthlyAmount : null,
+      oneTimeAmount: rentOrSell == 'Rent' ? oneTimeAmount : null,
     };
 
     console.log('Warehouse data to create:', warehouseData);
@@ -390,6 +373,7 @@ const allWarehouse = async ({
           { state: { $regex: regex } },
           { country: { $regex: regex } },
           { uniqueId: { $regex: regex } },
+          { discount: { $regex: regex } },
           { 'partnerName.name': { $regex: regex } },
           { 'partnerName.email': { $regex: regex } },
           { 'partnerName.username': { $regex: regex } },

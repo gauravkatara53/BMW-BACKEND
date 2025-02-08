@@ -19,47 +19,13 @@ const createOrderService = async (warehouseId, duration, user, session) => {
   }
 
   // Calculate the base price and non-monthly price
-  const basePrice = warehouse.price.reduce((total, priceItem) => {
-    return total + (priceItem.isMonthly ? priceItem.amount * duration : 0);
-  }, 0);
-
-  const nonMonthlyPrice = warehouse.price.reduce((total, priceItem) => {
-    return total + (!priceItem.isMonthly ? priceItem.amount : 0);
-  }, 0);
+  const basePrice = warehouse.monthlyAmount * duration;
+  const nonMonthlyPrice = warehouse.subTotalPrice - warehouse.monthlyAmount;
 
   const subTotalPriceForRent = basePrice + nonMonthlyPrice;
 
-  // Calculate total discount
-  // Initialize totalDiscount
-  let totalDiscount = 0;
-
-  // If warehouse.discount is an array, process each discount
-  if (Array.isArray(warehouse.discount)) {
-    totalDiscount = warehouse.discount.reduce((acc, discount) => {
-      if (discount.discountType === 'Percentage') {
-        return acc + (subTotalPriceForRent * discount.discountValue) / 100;
-      } else if (discount.discountType === 'Flat') {
-        return acc + discount.discountValue;
-      }
-      return acc;
-    }, 0);
-  } else if (warehouse.discount && typeof warehouse.discount === 'object') {
-    // If warehouse.discount is a single object, apply it directly
-    if (warehouse.discount.discountType === 'Percentage') {
-      totalDiscount =
-        (subTotalPriceForRent * warehouse.discount.discountValue) / 100;
-    } else if (warehouse.discount.discountType === 'Flat') {
-      totalDiscount = warehouse.discount.discountValue;
-    }
-  }
-
-  // Ensure total discount does not exceed subtotal
-  totalDiscount = Math.min(totalDiscount, subTotalPriceForRent);
-
   // Apply discount to total price
-  const totalPriceForRent = subTotalPriceForRent - totalDiscount;
-
-  // Apply discount to the rent or sell total price (logic is not correct) for Rent
+  const totalPriceForRent = subTotalPriceForRent;
 
   const totalPrice =
     warehouse.rentOrSell === 'Rent' ? totalPriceForRent : warehouse.totalPrice;
@@ -109,9 +75,14 @@ const createOrderService = async (warehouseId, duration, user, session) => {
       endDate: duration
         ? new Date().setMonth(new Date().getMonth() + duration)
         : null,
-      subTotalPrice: totalPriceForRent,
-      totalDiscount: warehouse.discount?.discountValue || 0,
-      totalPrice,
+      subTotalPrice:
+        warehouse.rentOrSell == 'Rent'
+          ? totalPriceForRent
+          : warehouse.subTotalPrice,
+      totalPrice:
+        warehouse.rentOrSell == 'Rent'
+          ? totalPriceForRent
+          : warehouse.totalPrice,
       totalPaid: 0,
       unpaidAmount: totalPrice,
       WarehouseDetail: warehouseId,
@@ -121,18 +92,22 @@ const createOrderService = async (warehouseId, duration, user, session) => {
       monthlyAmount: duration
         ? parseFloat((totalPrice / duration).toFixed(2))
         : 0,
-      paymentDate: null,
+      paymentDay: 5,
     },
   ]);
 
+  const monthlyAmount = parseFloat((totalPrice / duration).toFixed(2));
+  const transactionAmount =
+    warehouse.rentOrSell === 'Rent' ? monthlyAmount : warehouse.totalPrice;
+
   const options = {
-    amount: totalPrice * 100, // Convert to paise (INR)
+    amount: transactionAmount * 100, // Convert to paise (INR)
     currency: 'INR',
     receipt: `receipt_${Date.now()}`,
   };
 
   const razorpayOrder = await razorpay.orders.create(options);
-  const transactionAmount = totalPrice;
+
   const transaction = await Transaction.create([
     {
       warehouseId,
@@ -227,8 +202,9 @@ const getOrderDetailService = async (orderId) => {
   // Fetch the order with populated WarehouseDetail
   const order = await Order.findById(orderId)
     .populate(
-      'WarehouseDetail name location partnerName WarehouseStatus paymentDueDays',
-      'name location partnerName WarehouseStatus address city pincode state country'
+      'WarehouseDetail',
+      ' name location partnerName areaSqFt price discount WarehouseStatus paymentDueDays address city pincode state country'
+      // 'name location partnerName WarehouseStatus address city pincode state country'
     )
     .populate('transactionDetails', 'paymentStatus transactionDate')
     .populate('partnerDetails', 'name')
