@@ -2,7 +2,10 @@ import { Transaction } from '../models/transactionModel.js';
 // import { BookOrder } from '../models/bookOrder.js';
 import crypto from 'crypto';
 // import { Razorpay } from '../config/razorpayConfig.js';
-
+import { Order } from '../models/orderModel.js';
+import { rentPaymentQueue } from '../Queue/RentPayment.js';
+import { ApiError } from '../utils/ApiError.js';
+import Razorpay from 'razorpay';
 export const createRazorpayOrder = async (amount) => {
   const options = {
     amount: amount * 100, // Convert to smallest currency unit
@@ -126,4 +129,84 @@ export const getAllTransactionsService = async ({
     totalPages,
     totalTransactions,
   };
+};
+
+// monthy payment of rent
+const razorpay = new Razorpay({
+  key_id: process.env.RAZORPAY_KEY_ID,
+  key_secret: process.env.RAZORPAY_KEY_SECRET,
+});
+
+export const rentPaymentService = async (req) => {
+  try {
+    const { orderId } = req.params;
+    const user = req.user; // Assuming user is stored in req.user from authentication middleware
+    console.log('Warehouse ID:', orderId);
+
+    const order = await Order.findById(orderId);
+    if (!order) throw new ApiError(404, 'Order not found');
+
+    // Find first unpaid month and get its _id
+    const unpaidMonth = order.monthlyPayment.find(
+      (month) => month.paymentStatus === 'Unpaid'
+    );
+    if (!unpaidMonth) throw new ApiError(400, 'No unpaid monthly rent found');
+
+    const monthRentId = unpaidMonth._id;
+
+    // Update the payment status to 'Processing'
+    await Order.updateOne(
+      { _id: orderId, 'monthlyPayment._id': monthRentId },
+      { $set: { 'monthlyPayment.$.paymentStatus': 'Processing' } }
+    );
+
+    // Fetch updated order after update
+    const updatedOrder = await Order.findById(orderId);
+
+    const options = {
+      amount: updatedOrder.monthlyAmount * 100, // Convert to paise
+      currency: 'INR',
+      receipt: `receipt_${Date.now()}`,
+    };
+
+    const razorpayOrder = await razorpay.orders.create(options);
+
+    const transaction = await Transaction.create({
+      warehouseId: updatedOrder.WarehouseDetail,
+      orderId: updatedOrder._id,
+      monthRentId,
+      totalPrice: updatedOrder.monthlyAmount,
+      transactionDate: new Date(),
+      paymentStatus: 'Pending',
+      createdBy: user._id,
+      razorpayOrderId: razorpayOrder.id,
+      razorpayPaymentId: null,
+      razorpaySignature: null,
+    });
+
+    await rentPaymentQueue.add(
+      {
+        orderId: updatedOrder._id,
+        transactionId: transaction._id,
+      },
+      { delay: 300000 } // 5 minutes delay
+    );
+
+    return { updatedOrder, razorpayOrder, transaction };
+  } catch (error) {
+    throw new ApiError(500, error.message);
+  }
+};
+
+export const verifyRazorpaySignatureRent = (
+  razorpayOrderId,
+  razorpayPaymentId,
+  razorpaySignature,
+  secretKey
+) => {
+  const generatedSignature = crypto
+    .createHmac('sha256', secretKey)
+    .update(`${razorpayOrderId}|${razorpayPaymentId}`)
+    .digest('hex');
+  return generatedSignature === razorpaySignature;
 };

@@ -39,7 +39,7 @@ const orderSchema = new mongoose.Schema(
         },
         paymentStatus: {
           type: String,
-          enum: ['Paid', 'Unpaid'],
+          enum: ['Paid', 'Unpaid','Processing'],
           default: 'Unpaid',
         },
       },
@@ -68,17 +68,14 @@ const orderSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Transaction',
     },
-    paymentDate: {
-      type: Date,
+    paymentDay: {
+      type: Number,
     },
     subTotalPrice: {
       type: Number,
       default: 0,
     },
-    totalDiscount: {
-      type: Number,
-      default: 0,
-    },
+
     monthlyAmount: {
       type: Number,
       default: 0,

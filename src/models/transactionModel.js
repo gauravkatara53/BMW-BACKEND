@@ -12,6 +12,9 @@ const transactionSchema = new mongoose.Schema(
       ref: 'Order', // Reference to the Product model
       required: true,
     },
+    monthRentId: {
+      type: String,
+    },
     totalPrice: {
       type: Number,
       required: true,

@@ -26,7 +26,6 @@ const createWarehouseService = async (req) => {
       nearestFacility,
       areaSqFt,
       rentOrSell,
-      discount,
       paymentDueDays,
     } = req.body;
 
@@ -46,8 +45,6 @@ const createWarehouseService = async (req) => {
       .createHash('md5')
       .update(uniqueString)
       .digest('hex');
-
-    console.log('Generated Unique ID:', uniqueId);
 
     // Step 2: Check for existing warehouse
     const existingWarehouse = await Warehouse.findOne({ uniqueId });
@@ -74,66 +71,61 @@ const createWarehouseService = async (req) => {
       }
     });
 
-    // Step 4: Validate Discount
-    if (!discount || !discount.discountType || !discount.discountValue) {
-      console.error('Discount validation failed:', discount);
-      throw new ApiError(400, 'Invalid discount data.');
-    }
-
     // Step 5: Validate Rent-specific Rules
-    if (rentOrSell === 'Rent') {
-      if (!paymentDueDays || paymentDueDays <= 30) {
-        console.error(
-          'Payment due days validation failed for rent:',
-          paymentDueDays
-        );
-        throw new ApiError(
-          400,
-          'Payment due days must be more than 30 for rent.'
-        );
-      }
+    if (rentOrSell === 'Rent' && (!paymentDueDays || paymentDueDays <= 30)) {
+      console.error(
+        'Payment due days validation failed for rent:',
+        paymentDueDays
+      );
+      throw new ApiError(
+        400,
+        'Payment due days must be more than 30 for rent.'
+      );
     }
 
-    // Step 6: Calculate Prices and Discounts
-    let subTotalPrice = 0;
+    // Step 6: Calculate Prices
+    let monthlyAmount = 0;
+    let total = 0;
+
+    if (rentOrSell === 'Rent') {
+      monthlyAmount = price.reduce(
+        (sum, priceItem) => sum + (priceItem.isMonthly ? priceItem.amount : 0),
+        0
+      );
+    } else {
+      total = price.reduce((sum, priceItem) => sum + priceItem.amount, 0);
+    }
+    let oneTimeAmount = 0;
+    if (rentOrSell === 'Rent') {
+      oneTimeAmount = price.reduce(
+        (sum, priceItem) => sum + (!priceItem.isMonthly ? priceItem.amount : 0),
+        0
+      );
+    }
+
+    let subTotalPrice =
+      rentOrSell === 'Rent' ? monthlyAmount + oneTimeAmount : total;
     let totalDiscount = 0;
-
-    const calculatedPrice = price.map((item) => {
-      let discountAmount = 0;
-      if (discount.discountType === 'Percentage') {
-        discountAmount = (item.amount * discount.discountValue) / 100;
-      } else if (discount.discountType === 'Flat') {
-        discountAmount = discount.discountValue;
-      }
-
-      totalDiscount += discountAmount;
-      subTotalPrice += item.amount;
-
-      return {
-        ...item,
-        discount: discountAmount,
-      };
-    });
-
-    const totalPrice = subTotalPrice - totalDiscount;
+    let totalPrice = subTotalPrice - totalDiscount;
 
     console.log('Prices calculated:', {
       subTotalPrice,
       totalDiscount,
       totalPrice,
-      calculatedPrice,
     });
 
     // Step 7: Create Warehouse
+    const partnerId = req.partner?._id || null;
+
     const warehouseData = {
       name,
       about,
       category,
-      price: calculatedPrice,
+      price,
       WarehouseStatus: 'Available',
       location: {
         type: 'Point',
-        coordinates: coordinates,
+        coordinates,
       },
       address,
       city,
@@ -146,12 +138,13 @@ const createWarehouseService = async (req) => {
       areaSqFt,
       rentOrSell,
       subTotalPrice,
-      discount,
       totalDiscount,
       totalPrice,
       paymentDueDays,
-      partnerName: req.partner._id,
-      uniqueId, // Store the unique ID
+      partnerName: partnerId,
+      uniqueId,
+      monthlyAmount: rentOrSell === 'Rent' ? monthlyAmount : null,
+      oneTimeAmount: rentOrSell == 'Rent' ? oneTimeAmount : null,
     };
 
     console.log('Warehouse data to create:', warehouseData);
@@ -354,39 +347,53 @@ const allWarehouse = async ({
   sortOrder,
   category,
   WarehouseStatus,
-  search, // Search parameter
+  search, // Enhanced search parameter
   start, // Start date for filtering
   end, // End date for filtering
+  rentOrSell, // Rent or Sell filter
 }) => {
   // Construct filters based on query parameters
   const filters = {};
   if (category) filters.category = category;
   if (WarehouseStatus) filters.WarehouseStatus = WarehouseStatus;
+  if (rentOrSell) filters.rentOrSell = rentOrSell; // Adding Rent or Sell filter
 
-  // Add search filter (if provided)
+  // Enhanced search logic
   if (search) {
-    const searchRegex = new RegExp(search, 'i'); // Case-insensitive search
-    const isNumeric = !isNaN(Number(search)); // Check if the search term is a number
+    const searchTerms = search.split(' ').filter(Boolean); // Split input into words
 
-    // Add search conditions
-    filters.$or = [
-      { name: { $regex: searchRegex } },
-      { category: { $regex: searchRegex } },
-      { address: { $regex: searchRegex } },
-      { city: { $regex: searchRegex } },
-      { state: { $regex: searchRegex } },
-      { country: { $regex: searchRegex } },
-      ...(isNumeric
-        ? [{ pincode: search }] // Exact match for numeric fields
-        : []),
-    ];
+    filters.$and = searchTerms.map((term) => {
+      const regex = new RegExp(term, 'i'); // Case-insensitive regex
+      return {
+        $or: [
+          { name: { $regex: regex } },
+          { category: { $regex: regex } },
+          { address: { $regex: regex } },
+          { city: { $regex: regex } },
+          { state: { $regex: regex } },
+          { country: { $regex: regex } },
+          { uniqueId: { $regex: regex } },
+          { discount: { $regex: regex } },
+          { 'partnerName.name': { $regex: regex } },
+          { 'partnerName.email': { $regex: regex } },
+          { 'partnerName.username': { $regex: regex } },
+          { 'facility.name': { $regex: regex } },
+          { 'nearestFacility.name': { $regex: regex } },
+          { 'nearestFacility.value': { $regex: regex } },
+          { 'rooms.name': { $regex: regex } },
+          ...(isNaN(Number(term))
+            ? []
+            : [{ pincode: Number(term) }, { 'price.amount': Number(term) }]),
+        ],
+      };
+    });
   }
 
   // Add date range filter (if provided)
   if (start || end) {
     filters.createdAt = {};
-    if (start) filters.createdAt.$gte = start;
-    if (end) filters.createdAt.$lte = end;
+    if (start) filters.createdAt.$gte = new Date(start);
+    if (end) filters.createdAt.$lte = new Date(end);
   }
 
   // Calculate pagination
@@ -405,6 +412,9 @@ const allWarehouse = async ({
   return {
     warehouses,
     totalWarehouses,
+    currentPage: page,
+    limit,
+    totalPages: Math.ceil(totalWarehouses / limit),
   };
 };
 

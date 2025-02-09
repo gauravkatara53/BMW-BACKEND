@@ -10,7 +10,7 @@ const razorpay = new Razorpay({
   key_secret: process.env.RAZORPAY_KEY_SECRET,
 });
 
-const createOrderService = async (warehouseId, duration, user) => {
+const createOrderService = async (warehouseId, duration, user, session) => {
   const warehouse = await Warehouse.findById(warehouseId);
   if (!warehouse) throw new ApiError(404, 'Warehouse not found');
 
@@ -18,31 +18,13 @@ const createOrderService = async (warehouseId, duration, user) => {
     throw new ApiError(400, 'Warehouse is not available');
   }
 
-  // Calculate subtotal and monthly amounts
-  const basePrice = warehouse.price.reduce((total, priceItem) => {
-    // If the price item is monthly, multiply by the duration
-    return total + (priceItem.isMonthly ? priceItem.amount * duration : 0);
-  }, 0);
+  const basePrice = warehouse.monthlyAmount * duration;
+  const nonMonthlyPrice = warehouse.subTotalPrice - warehouse.monthlyAmount;
+  const subTotalPriceForRent = basePrice + nonMonthlyPrice;
+  const totalPriceForRent = subTotalPriceForRent;
+  const totalPrice =
+    warehouse.rentOrSell === 'Rent' ? totalPriceForRent : warehouse.totalPrice;
 
-  const nonMonthlyPrice = warehouse.price.reduce((total, priceItem) => {
-    // For non-monthly items, just add the amount as is
-    return total + (!priceItem.isMonthly ? priceItem.amount : 0);
-  }, 0);
-
-  // Calculate the subTotalPrice by summing basePrice and non-monthlyPrice
-  const subTotalPrice = basePrice + nonMonthlyPrice;
-
-  // Calculate the total price, subtracting any discount
-  const totalPrice = subTotalPrice - (warehouse.discount?.discountValue || 0);
-
-  // Calculate monthly amount if duration is provided
-  const monthlyAmount = duration ? +(totalPrice / duration).toFixed(2) : 0;
-
-  // Generate monthly payment breakdown
-  const monthlyPayment = [];
-  const startDate = new Date(); // Current date (e.g., January 26, 2025)
-
-  // Array of ordinal labels for months: 'First', 'Second', 'Third', etc.
   const ordinalMonths = [
     'First',
     'Second',
@@ -57,16 +39,22 @@ const createOrderService = async (warehouseId, duration, user) => {
     'Eleventh',
     'Twelfth',
   ];
+  let monthlyPayment = [];
+  if (duration) {
+    const monthlyAmount = parseFloat((totalPrice / duration).toFixed(2));
+    const startDate = new Date();
 
-  for (let i = 0; i < duration; i++) {
-    monthlyPayment.push({
-      month: ordinalMonths[i], // Use ordinal month names
-      amount: monthlyAmount, // The calculated monthly amount
-      paymentStatus: 'Unpaid', // Default status for payments
-    });
+    for (let i = 0; i < duration; i++) {
+      const paymentDate = new Date(startDate);
+      paymentDate.setMonth(paymentDate.getMonth() + i);
+
+      monthlyPayment.push({
+        month: ordinalMonths[i],
+        amount: monthlyAmount,
+        paymentStatus: 'Unpaid',
+      });
+    }
   }
-
-  console.log(monthlyPayment); // Debugging line to check payment breakdown
 
   const uniqueOrderId = `ORD-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 
@@ -76,34 +64,43 @@ const createOrderService = async (warehouseId, duration, user) => {
       orderStatus: 'Pending',
       orderDate: new Date(),
       duration,
-      startDate,
+      startDate: new Date(),
       endDate: duration
-        ? new Date(startDate.setMonth(startDate.getMonth() + duration))
+        ? new Date().setMonth(new Date().getMonth() + duration)
         : null,
-      subTotalPrice,
-      totalDiscount: warehouse.discount?.discountValue || 0,
-      totalPrice,
+      subTotalPrice:
+        warehouse.rentOrSell == 'Rent'
+          ? totalPriceForRent
+          : warehouse.subTotalPrice,
+      totalPrice:
+        warehouse.rentOrSell == 'Rent'
+          ? totalPriceForRent
+          : warehouse.totalPrice,
       totalPaid: 0,
       unpaidAmount: totalPrice,
       WarehouseDetail: warehouseId,
       customerDetails: user._id,
       partnerDetails: warehouse.partnerName,
       monthlyPayment,
-      monthlyAmount: monthlyAmount,
-      paymentDate: null,
+      monthlyAmount: duration
+        ? parseFloat((totalPrice / duration).toFixed(2))
+        : 0,
+      paymentDay: 5,
     },
   ]);
 
+  const monthlyAmount = parseFloat((totalPrice / duration).toFixed(2));
+  const transactionAmount =
+    warehouse.rentOrSell === 'Rent' ? monthlyAmount : warehouse.totalPrice;
+
   const options = {
-    amount:
-      (warehouse.rentOrSell === 'Rent' ? monthlyAmount : totalPrice) * 100, // Use monthlyAmount for rent, totalPrice for sell
+    amount: transactionAmount * 100, // Convert to paise (INR)
     currency: 'INR',
     receipt: `receipt_${Date.now()}`,
   };
 
   const razorpayOrder = await razorpay.orders.create(options);
-  const transactionAmount =
-    warehouse.rentOrSell === 'Rent' ? monthlyAmount : totalPrice;
+
   const transaction = await Transaction.create([
     {
       warehouseId,
@@ -134,7 +131,12 @@ const createOrderService = async (warehouseId, duration, user) => {
     { delay: 300000 }
   );
 
-  return { order: order[0], razorpayOrder, transaction: transaction[0] };
+  // ✅ Return the required values
+  return {
+    order: order[0],
+    razorpayOrder,
+    transaction: transaction[0],
+  };
 };
 
 const getAllUserOrdersService = async ({
@@ -198,8 +200,9 @@ const getOrderDetailService = async (orderId) => {
   // Fetch the order with populated WarehouseDetail
   const order = await Order.findById(orderId)
     .populate(
-      'WarehouseDetail name location partnerName WarehouseStatus paymentDueDays',
-      'name location partnerName WarehouseStatus address city pincode state country'
+      'WarehouseDetail',
+      ' name location partnerName areaSqFt price discount WarehouseStatus paymentDueDays address city pincode state country'
+      // 'name location partnerName WarehouseStatus address city pincode state country'
     )
     .populate('transactionDetails', 'paymentStatus transactionDate')
     .populate('partnerDetails', 'name')

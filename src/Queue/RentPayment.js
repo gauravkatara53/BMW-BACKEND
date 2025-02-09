@@ -1,7 +1,6 @@
 import Queue from 'bull';
 import mongoose from 'mongoose';
 import { Order } from '../models/orderModel.js';
-import { Warehouse } from '../models/warehouseModel.js';
 import { Transaction } from '../models/transactionModel.js';
 import { ApiError } from '../utils/ApiError.js';
 
@@ -11,7 +10,7 @@ const redisConfig = {
   port: process.env.REDIS_PORT || 6379,
 };
 
-const paymentQueue = new Queue('paymentQueue', {
+const rentPaymentQueue = new Queue('paymentQueue', {
   redis: redisConfig,
   defaultJobOptions: {
     attempts: 3, // Retry up to 3 times before marking failed
@@ -22,40 +21,33 @@ const paymentQueue = new Queue('paymentQueue', {
 });
 
 // Process payment status update jobs
-paymentQueue.process(async (job) => {
-  const { orderId, warehouseId, transactionId } = job.data;
+rentPaymentQueue.process(async (job) => {
+  const { orderId, transactionId } = job.data;
   const session = await mongoose.startSession();
 
   try {
     session.startTransaction();
 
-    // Fetch order, warehouse, and transaction details
+    // Fetch order and transaction details
     const order = await Order.findById(orderId).session(session);
     if (!order) throw new ApiError(404, `Order with ID ${orderId} not found`);
-
-    const warehouse = await Warehouse.findById(warehouseId).session(session);
-    if (!warehouse)
-      throw new ApiError(404, `Warehouse with ID ${warehouseId} not found`);
 
     const transaction =
       await Transaction.findById(transactionId).session(session);
     if (!transaction)
       throw new ApiError(400, `Transaction with ID ${transactionId} not found`);
 
-    // If payment status is 'Pending' or 'Failed', update order and transaction status
+    // If payment status is 'Pending' or 'Failed', revert the monthly payment status to 'Unpaid'
     if (
       transaction.paymentStatus === 'Pending' ||
       transaction.paymentStatus === 'Failed'
     ) {
-      await Order.findByIdAndUpdate(
-        orderId,
-        { orderStatus: 'Failed' },
-        { session }
-      );
+      // Find the corresponding monthRentId in the order's monthlyPayment array
+      const monthRentId = transaction.monthRentId;
 
-      await Warehouse.findByIdAndUpdate(
-        warehouseId,
-        { WarehouseStatus: 'Available' },
+      await Order.updateOne(
+        { _id: orderId, 'monthlyPayment._id': monthRentId },
+        { $set: { 'monthlyPayment.$.paymentStatus': 'Unpaid' } },
         { session }
       );
 
@@ -66,7 +58,7 @@ paymentQueue.process(async (job) => {
       );
 
       console.log(
-        `Order ${orderId} and Payment ${transactionId} marked as failed.`
+        `Transaction ${transactionId} failed. MonthRent ${monthRentId} set to 'Unpaid' in Order ${orderId}.`
       );
     }
 
@@ -93,4 +85,4 @@ paymentQueue.process(async (job) => {
   }
 });
 
-export { paymentQueue };
+export { rentPaymentQueue };

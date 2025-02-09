@@ -171,28 +171,36 @@ const WarehouseSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
-    discount: {
-      discountType: {
-        type: String,
-        enum: ['Percentage', 'Flat'],
-        required: [true, 'Discount type is required'],
-      },
-      discountValue: {
-        type: Number,
-        required: [true, 'Discount value is required'],
-        min: [0, 'Discount value must be positive'],
-      },
-      couponCode: {
-        type: String,
-        trim: true,
-        required: [true, 'Coupon code is required'],
-      },
-    },
-    totalDiscount: {
+    // discount: {
+    //   discountType: {
+    //     type: String,
+    //     enum: ['Percentage', 'Flat'],
+    //     required: [true, 'Discount type is required'],
+    //   },
+    //   discountValue: {
+    //     type: Number,
+    //     required: [true, 'Discount value is required'],
+    //     min: [0, 'Discount value must be positive'],
+    //   },
+    //   couponCode: {
+    //     type: String,
+    //     trim: true,
+    //     required: [true, 'Coupon code is required'],
+    //   },
+    // },
+    // totalDiscount: {
+    //   type: Number,
+    //   default: 0,
+    // },
+    totalPrice: {
       type: Number,
       default: 0,
     },
-    totalPrice: {
+    monthlyAmount: {
+      type: Number,
+      default: 0,
+    },
+    oneTimeAmount: {
       type: Number,
       default: 0,
     },

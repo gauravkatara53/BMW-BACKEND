@@ -11,6 +11,7 @@ import {
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { ApiError } from '../utils/ApiError.js';
+
 const createWarehouse = asyncHandler(async (req, res) => {
   const createdWarehouse = await createWarehouseService(req); // Remove res from here
   return res
@@ -69,6 +70,7 @@ const allWarehouseController = asyncHandler(async (req, res) => {
     search, // Search query from the request
     startDate, // Start date for filtering from the request
     endDate, // End date for filtering from the request
+    rentOrSell,
   } = req.query;
 
   // Parse `page` and `limit` as integers
@@ -101,6 +103,7 @@ const allWarehouseController = asyncHandler(async (req, res) => {
     search,
     startDate,
     endDate,
+    rentOrSell,
   });
 
   try {
@@ -115,6 +118,7 @@ const allWarehouseController = asyncHandler(async (req, res) => {
       search,
       start,
       end,
+      rentOrSell,
     });
 
     // Log the filtered results and meta information

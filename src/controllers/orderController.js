@@ -61,35 +61,10 @@ const createOrder = asyncHandler(async (req, res) => {
     // Call the service to create the order
     const { order, razorpayOrder, transaction } = await createOrderService(
       warehouseId,
-      warehouse.rentOrSell === 'Rent' ? duration : null, // Pass duration only for Rent
+      warehouse.rentOrSell === 'Rent' ? duration : 'null', // Pass duration only for Rent
       req.user,
       session
     );
-
-    // Add monthly payments for "Rent" orders
-    if (warehouse.rentOrSell === 'Rent' && duration > 0) {
-      const monthlyPayment = [];
-      const monthlyAmount = parseFloat(
-        (order.totalPrice / duration).toFixed(2)
-      );
-
-      const startDate = new Date(order.startDate);
-
-      for (let i = 0; i < duration; i++) {
-        const paymentDate = new Date(startDate);
-        paymentDate.setMonth(paymentDate.getMonth() + i);
-
-        monthlyPayment.push({
-          month: ordinalMonths[i], // Use ordinal month names
-          amount: monthlyAmount,
-          paymentStatus: 'Unpaid',
-        });
-      }
-
-      // Save the monthlyPayment array to the order
-      order.monthlyPayment = monthlyPayment;
-      await order.save({ session });
-    }
 
     // Commit transaction
     await session.commitTransaction();
@@ -97,8 +72,8 @@ const createOrder = asyncHandler(async (req, res) => {
 
     const populatedOrder = await Order.findById(order._id)
       .populate('WarehouseDetail', 'name location paymentDueDays')
-      .populate('customerDetails', 'name email')
-      .populate('partnerDetails', 'name email');
+      .populate('customerDetails', 'name email phone address')
+      .populate('partnerDetails', 'name email phone address');
 
     return res.status(201).json(
       new ApiResponse(

@@ -7,6 +7,7 @@ import crypto from 'crypto';
 import {
   getRecentTransactionsService,
   getAllTransactionsService,
+  rentPaymentService,
 } from '../services/transactionService.js';
 export const verifyTransaction = asyncHandler(async (req, res) => {
   const { razorpayPaymentId, razorpayOrderId, razorpaySignature } = req.body;
@@ -247,4 +248,67 @@ export const transactionCardDetails = asyncHandler(async (req, res) => {
       .status(500)
       .json(new ApiError(500, 'Failed to fetch transaction details', error));
   }
+});
+
+export const rentPayment = asyncHandler(async (req, res, next) => {
+  try {
+    const paymentData = await rentPaymentService(req);
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(200, paymentData, 'Payment initiated successfully')
+      );
+  } catch (error) {
+    next(error);
+  }
+});
+
+export const verifyTransactionRent = asyncHandler(async (req, res) => {
+  const { razorpayPaymentId, razorpayOrderId, razorpaySignature } = req.body;
+
+  // Verify Razorpay signature
+  const generatedSignature = crypto
+    .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+    .update(`${razorpayOrderId}|${razorpayPaymentId}`)
+    .digest('hex');
+
+  if (generatedSignature !== razorpaySignature) {
+    await Transaction.findOneAndUpdate(
+      { razorpayOrderId },
+      { paymentStatus: 'Failed' },
+      { new: true }
+    );
+
+    throw new ApiError(400, 'Invalid payment signature');
+  }
+
+  // Retrieve transaction details to get orderId and monthRentId
+  const transaction = await Transaction.findOne({ razorpayOrderId });
+  if (!transaction) throw new ApiError(404, 'Transaction not found');
+
+  const { orderId, monthRentId } = transaction;
+
+  // Update payment status in the transaction
+  const payment = await Transaction.findOneAndUpdate(
+    { razorpayOrderId },
+    {
+      paymentStatus: 'Completed',
+      razorpayPaymentId,
+      razorpaySignature,
+    },
+    { new: true }
+  );
+
+  // Update the order's monthly payment status
+  await Order.findOneAndUpdate(
+    { _id: orderId, 'monthlyPayment._id': monthRentId },
+    { $set: { 'monthlyPayment.$.paymentStatus': 'Paid' } },
+    { new: true }
+  );
+
+  res.status(200).json({
+    success: true,
+    message: 'Payment verified successfully',
+    payment,
+  });
 });
