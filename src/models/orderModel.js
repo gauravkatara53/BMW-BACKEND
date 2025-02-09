@@ -39,7 +39,7 @@ const orderSchema = new mongoose.Schema(
         },
         paymentStatus: {
           type: String,
-          enum: ['Paid', 'Unpaid'],
+          enum: ['Paid', 'Unpaid','Processing'],
           default: 'Unpaid',
         },
       },

@@ -7,6 +7,7 @@ import crypto from 'crypto';
 import {
   getRecentTransactionsService,
   getAllTransactionsService,
+  rentPaymentService,
 } from '../services/transactionService.js';
 export const verifyTransaction = asyncHandler(async (req, res) => {
   const { razorpayPaymentId, razorpayOrderId, razorpaySignature } = req.body;
@@ -246,5 +247,24 @@ export const transactionCardDetails = asyncHandler(async (req, res) => {
     return res
       .status(500)
       .json(new ApiError(500, 'Failed to fetch transaction details', error));
+  }
+});
+
+export const rentPayment = asyncHandler(async (req, res) => {
+  try {
+    // Call the rent payment service
+    const paymentData = await rentPaymentService(req);
+
+    // Return success response
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(200, paymentData, 'Payment initiated successfully')
+      );
+  } catch (error) {
+    // Return error response
+    return res
+      .status(500)
+      .json(new ApiResponse(500, 'Payment initiation failed', error.message));
   }
 });

@@ -2,6 +2,8 @@ import { Transaction } from '../models/transactionModel.js';
 // import { BookOrder } from '../models/bookOrder.js';
 import crypto from 'crypto';
 // import { Razorpay } from '../config/razorpayConfig.js';
+import { Order } from '../models/orderModel.js';
+import { rentPaymentQueue } from '../Queue/RentPayment.js';
 
 export const createRazorpayOrder = async (amount) => {
   const options = {
@@ -126,4 +128,63 @@ export const getAllTransactionsService = async ({
     totalPages,
     totalTransactions,
   };
+};
+
+// monthy payment of rent
+
+export const rentPaymentService = async (req, res, next) => {
+  try {
+    const { orderId } = req.params;
+    const user = req.user; // Assuming user is stored in req.user from authentication middleware
+    console.log('warehouse id', orderId);
+    const order = await Order.findById(orderId);
+    if (!order) throw new ApiError(404, 'Order not found');
+
+    // Find first unpaid month and get its _id
+    const unpaidMonth = order.monthlyPayment.find(
+      (month) => month.paymentStatus === 'Unpaid'
+    );
+    if (!unpaidMonth) throw new ApiError(400, 'No unpaid monthly rent found');
+
+    const monthRentId = unpaidMonth._id;
+
+    // Update the payment status to 'Processing'
+    await Order.updateOne(
+      { _id: orderId, 'monthlyPayment._id': monthRentId },
+      { $set: { 'monthlyPayment.$.paymentStatus': 'Processing' } }
+    );
+
+    const options = {
+      amount: order.monthlyAmount * 100, // Convert to paise
+      currency: 'INR',
+      receipt: `receipt_${Date.now()}`,
+    };
+
+    const razorpayOrder = await razorpay.orders.create(options);
+
+    const transaction = await Transaction.create({
+      warehouseId: order.WarehouseDetail,
+      orderId: order._id,
+      monthRentId,
+      totalPrice: order.monthlyAmount,
+      transactionDate: new Date(),
+      paymentStatus: 'Pending',
+      createdBy: user._id,
+      razorpayOrderId: razorpayOrder.id,
+      razorpayPaymentId: null,
+      razorpaySignature: null,
+    });
+
+    await rentPaymentQueue.add(
+      {
+        orderId: order._id,
+        transactionId: transaction._id,
+      },
+      { delay: 300000 } // 5 minutes delay
+    );
+
+    return { order, razorpayOrder, transaction };
+  } catch (error) {
+    next(error);
+  }
 };

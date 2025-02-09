@@ -138,7 +138,6 @@ const createOrderService = async (warehouseId, duration, user, session) => {
     { delay: 300000 }
   );
 
-  return { order: order[0], razorpayOrder, transaction: transaction[0] };
 };
 
 const getAllUserOrdersService = async ({
