@@ -18,19 +18,13 @@ const createOrderService = async (warehouseId, duration, user, session) => {
     throw new ApiError(400, 'Warehouse is not available');
   }
 
-  // Calculate the base price and non-monthly price
   const basePrice = warehouse.monthlyAmount * duration;
   const nonMonthlyPrice = warehouse.subTotalPrice - warehouse.monthlyAmount;
-
   const subTotalPriceForRent = basePrice + nonMonthlyPrice;
-
-  // Apply discount to total price
   const totalPriceForRent = subTotalPriceForRent;
-
   const totalPrice =
     warehouse.rentOrSell === 'Rent' ? totalPriceForRent : warehouse.totalPrice;
 
-  // Generate monthly payment breakdown for rent orders
   const ordinalMonths = [
     'First',
     'Second',
@@ -55,7 +49,7 @@ const createOrderService = async (warehouseId, duration, user, session) => {
       paymentDate.setMonth(paymentDate.getMonth() + i);
 
       monthlyPayment.push({
-        month: ordinalMonths[i], // Use ordinal month names
+        month: ordinalMonths[i],
         amount: monthlyAmount,
         paymentStatus: 'Unpaid',
       });
@@ -64,7 +58,6 @@ const createOrderService = async (warehouseId, duration, user, session) => {
 
   const uniqueOrderId = `ORD-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 
-  // Create the order
   const order = await Order.create([
     {
       orderId: uniqueOrderId,
@@ -138,6 +131,12 @@ const createOrderService = async (warehouseId, duration, user, session) => {
     { delay: 300000 }
   );
 
+  // ✅ Return the required values
+  return {
+    order: order[0],
+    razorpayOrder,
+    transaction: transaction[0],
+  };
 };
 
 const getAllUserOrdersService = async ({

@@ -61,7 +61,7 @@ const createOrder = asyncHandler(async (req, res) => {
     // Call the service to create the order
     const { order, razorpayOrder, transaction } = await createOrderService(
       warehouseId,
-      warehouse.rentOrSell === 'Rent' ? duration : null, // Pass duration only for Rent
+      warehouse.rentOrSell === 'Rent' ? duration : 'null', // Pass duration only for Rent
       req.user,
       session
     );
