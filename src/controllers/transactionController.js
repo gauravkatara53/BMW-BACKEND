@@ -9,8 +9,11 @@ import {
   getAllTransactionsService,
   rentPaymentService,
 } from '../services/transactionService.js';
+
 export const verifyTransaction = asyncHandler(async (req, res) => {
   const { razorpayPaymentId, razorpayOrderId, razorpaySignature } = req.body;
+
+  console.log(`🔍 Verifying payment for Razorpay Order ID: ${razorpayOrderId}`);
 
   // Verify Razorpay signature
   const generatedSignature = crypto
@@ -19,23 +22,19 @@ export const verifyTransaction = asyncHandler(async (req, res) => {
     .digest('hex');
 
   if (generatedSignature !== razorpaySignature) {
+    console.error(`❌ Invalid signature for order ${razorpayOrderId}`);
+
     await Transaction.findOneAndUpdate(
       { razorpayOrderId },
       { paymentStatus: 'Failed' },
       { new: true }
     );
 
-    await Order.findOneAndUpdate(
-      { razorpayOrderId }, // Make sure you're targeting the order by razorpayOrderId
-      { orderStatus: 'Failed' },
-      { new: true }
-    );
-
     throw new ApiError(400, 'Invalid payment signature');
   }
 
-  // Update payment status to completed
-  const payment = await Transaction.findOneAndUpdate(
+  // ✅ Step 1: Find Transaction to get `orderId`
+  const transaction = await Transaction.findOneAndUpdate(
     { razorpayOrderId },
     {
       paymentStatus: 'Completed',
@@ -45,14 +44,45 @@ export const verifyTransaction = asyncHandler(async (req, res) => {
     { new: true }
   );
 
-  // Update booking payment status
-  await Order.findByIdAndUpdate(payment.orderId, {
-    orderStatus: 'Completed',
-  });
+  if (!transaction) {
+    throw new ApiError(404, 'Transaction not found');
+  }
+
+  const { orderId } = transaction; // Extract `orderId`
+  if (!orderId) {
+    throw new ApiError(400, 'Order ID not found in transaction');
+  }
+
+  console.log(`✅ Found Order ID: ${orderId} from Transaction`);
+
+  // ✅ Step 2: Find the Order using `orderId`
+  const order = await Order.findById(orderId);
+
+  if (!order) {
+    console.error(`❌ Order not found for orderId: ${orderId}`);
+    throw new ApiError(404, 'Order not found');
+  }
+
+  console.log(`✅ Order found: ${order._id}`);
+
+  // ✅ Step 3: Mark "Processing" month as "Paid"
+  const unpaidMonth = order.monthlyPayment.find(
+    (month) => month.paymentStatus === 'Processing'
+  );
+
+  if (unpaidMonth) {
+    await Order.updateOne(
+      { _id: order._id, 'monthlyPayment._id': unpaidMonth._id },
+      { $set: { 'monthlyPayment.$.paymentStatus': 'Paid' } }
+    );
+  }
+
+  // ✅ Step 4: Update order status to "Completed"
+  await Order.findByIdAndUpdate(order._id, { orderStatus: 'Completed' });
 
   res.status(200).json({
     success: true,
-    message: 'Payment verified successfully',
+    message: 'Payment verified successfully, order marked as Completed',
   });
 });
 

@@ -50,12 +50,15 @@ paymentQueue.process(async (job) => {
       await Order.findByIdAndUpdate(
         orderId,
         { orderStatus: 'Failed' },
+        { _id: orderId, 'monthlyPayment._id': monthRentId },
+        { $set: { 'monthlyPayment.$.paymentStatus': 'Unpaid' } },
         { session }
       );
 
       await Warehouse.findByIdAndUpdate(
         warehouseId,
         { WarehouseStatus: 'Available' },
+
         { session }
       );
 
