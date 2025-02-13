@@ -141,7 +141,7 @@ export const rentPaymentService = async (req) => {
   try {
     const { orderId } = req.params;
     const user = req.user; // Assuming user is stored in req.user from authentication middleware
-    console.log('Warehouse ID:', orderId);
+    console.log('order ID:', orderId);
 
     const order = await Order.findById(orderId);
     if (!order) throw new ApiError(404, 'Order not found');

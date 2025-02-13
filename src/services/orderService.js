@@ -39,6 +39,7 @@ const createOrderService = async (warehouseId, duration, user, session) => {
     'Eleventh',
     'Twelfth',
   ];
+
   let monthlyPayment = [];
   if (duration) {
     const monthlyAmount = parseFloat((totalPrice / duration).toFixed(2));
@@ -58,7 +59,7 @@ const createOrderService = async (warehouseId, duration, user, session) => {
 
   const uniqueOrderId = `ORD-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 
-  const order = await Order.create([
+  const [order] = await Order.create([
     {
       orderId: uniqueOrderId,
       orderStatus: 'Pending',
@@ -66,14 +67,14 @@ const createOrderService = async (warehouseId, duration, user, session) => {
       duration,
       startDate: new Date(),
       endDate: duration
-        ? new Date().setMonth(new Date().getMonth() + duration)
+        ? new Date(new Date().setMonth(new Date().getMonth() + duration))
         : null,
       subTotalPrice:
-        warehouse.rentOrSell == 'Rent'
+        warehouse.rentOrSell === 'Rent'
           ? totalPriceForRent
           : warehouse.subTotalPrice,
       totalPrice:
-        warehouse.rentOrSell == 'Rent'
+        warehouse.rentOrSell === 'Rent'
           ? totalPriceForRent
           : warehouse.totalPrice,
       totalPaid: 0,
@@ -85,11 +86,13 @@ const createOrderService = async (warehouseId, duration, user, session) => {
       monthlyAmount: duration
         ? parseFloat((totalPrice / duration).toFixed(2))
         : 0,
-      paymentDay: 5,
+      paymentDay: warehouse.paymentDueDays,
     },
   ]);
 
-  const monthlyAmount = parseFloat((totalPrice / duration).toFixed(2));
+  const monthlyAmount = duration
+    ? parseFloat((totalPrice / duration).toFixed(2))
+    : 0;
   const transactionAmount =
     warehouse.rentOrSell === 'Rent' ? monthlyAmount : warehouse.totalPrice;
 
@@ -99,12 +102,23 @@ const createOrderService = async (warehouseId, duration, user, session) => {
     receipt: `receipt_${Date.now()}`,
   };
 
+  let monthRentId = null;
+  if (warehouse.rentOrSell === 'Rent') {
+    const unpaidMonth = order.monthlyPayment.find(
+      (month) => month.paymentStatus === 'Unpaid'
+    );
+    if (!unpaidMonth) throw new ApiError(400, 'No unpaid monthly rent found');
+
+    monthRentId = unpaidMonth._id;
+  }
+
   const razorpayOrder = await razorpay.orders.create(options);
 
-  const transaction = await Transaction.create([
+  const [transaction] = await Transaction.create([
     {
       warehouseId,
-      orderId: order[0]._id,
+      orderId: order._id,
+      monthRentId: warehouse.rentOrSell === 'Rent' ? monthRentId : null,
       totalPrice: transactionAmount,
       transactionDate: new Date(),
       paymentStatus: 'Pending',
@@ -122,20 +136,26 @@ const createOrderService = async (warehouseId, duration, user, session) => {
     { new: true }
   );
 
+  if (warehouse.rentOrSell === 'Rent') {
+    await Order.updateOne(
+      { _id: order._id, 'monthlyPayment._id': monthRentId },
+      { $set: { 'monthlyPayment.$.paymentStatus': 'Processing' } }
+    );
+  }
+
   await paymentQueue.add(
     {
-      orderId: order[0]._id,
+      orderId: order._id,
       warehouseId,
-      transactionId: transaction[0]._id,
+      transactionId: transaction._id,
     },
     { delay: 300000 }
   );
 
-  // ✅ Return the required values
   return {
-    order: order[0],
+    order,
     razorpayOrder,
-    transaction: transaction[0],
+    transaction,
   };
 };
 
@@ -147,42 +167,118 @@ const getAllUserOrdersService = async ({
   sortOrder = 'desc',
   orderStatus,
   warehouseId,
+  searchTerm,
+  startDate,
+  endDate,
+  rentOrSell, // Added rentOrSell filter
 }) => {
-  // Construct filter based on query parameters
-  const filter = { customerDetails: userId };
-  if (orderStatus) filter.orderStatus = orderStatus;
-  if (warehouseId) filter.WarehouseDetail = warehouseId;
+  // Construct base filter
+  const baseFilter = { customerDetails: userId };
 
-  // Calculate pagination
-  const pageNumber = parseInt(page, 10);
-  const limitNumber = parseInt(limit, 10);
-  const skip = (pageNumber - 1) * limitNumber;
+  if (orderStatus) baseFilter.orderStatus = orderStatus;
+  if (warehouseId) baseFilter.WarehouseDetail = warehouseId;
 
-  // Fetch total count of orders
-  const totalOrders = await Order.countDocuments(filter);
+  // Date range filter
+  const dateFilter = {};
+  if (startDate || endDate) {
+    dateFilter.createdAt = {};
+    if (startDate) dateFilter.createdAt.$gte = new Date(startDate);
+    if (endDate) dateFilter.createdAt.$lte = new Date(endDate);
+  }
+
+  // Aggregation pipeline
+  const pipeline = [
+    { $match: { ...baseFilter, ...dateFilter } },
+    // Join WarehouseDetail
+    {
+      $lookup: {
+        from: 'warehouses',
+        localField: 'WarehouseDetail',
+        foreignField: '_id',
+        as: 'WarehouseDetail',
+      },
+    },
+    { $unwind: { path: '$WarehouseDetail', preserveNullAndEmptyArrays: true } },
+    // Join partnerDetails
+    {
+      $lookup: {
+        from: 'partners',
+        localField: 'partnerDetails',
+        foreignField: '_id',
+        as: 'partnerDetails',
+      },
+    },
+    { $unwind: { path: '$partnerDetails', preserveNullAndEmptyArrays: true } },
+  ];
+
+  // Apply rentOrSell filter
+  if (rentOrSell) {
+    pipeline.push({
+      $match: { 'WarehouseDetail.rentOrSell': rentOrSell },
+    });
+  }
+
+  // Add search filter if searchTerm exists
+  if (searchTerm) {
+    const searchRegex = new RegExp(searchTerm, 'i');
+    pipeline.push({
+      $match: {
+        $or: [
+          { 'WarehouseDetail.name': searchRegex },
+          { 'WarehouseDetail.address': searchRegex },
+          { 'WarehouseDetail.city': searchRegex },
+          { 'WarehouseDetail.state': searchRegex },
+          { 'WarehouseDetail.country': searchRegex },
+          { 'WarehouseDetail.pincode': searchRegex },
+          { 'partnerDetails.username': searchRegex },
+          { 'partnerDetails.name': searchRegex },
+          { 'partnerDetails.email': searchRegex },
+          { 'partnerDetails.phone': searchRegex },
+        ],
+      },
+    });
+  }
+
+  // Add sorting
+  const sortDirection = sortOrder === 'desc' ? -1 : 1;
+  pipeline.push({ $sort: { [sortBy]: sortDirection } });
+
+  // Clone pipeline for count
+  const countPipeline = [...pipeline];
+  countPipeline.push({ $count: 'total' });
+
+  // Execute count query
+  const [totalResult] = await Order.aggregate(countPipeline);
+  const totalOrders = totalResult?.total || 0;
   if (!totalOrders) throw new ApiError(404, 'No orders found');
 
-  // Calculate total pages
+  // Pagination
+  const pageNumber = parseInt(page, 10);
+  const limitNumber = parseInt(limit, 10);
   const totalPages = Math.ceil(totalOrders / limitNumber);
 
-  // Fetch orders with filter, sorting, and pagination
-  const orders = await Order.find(filter)
-    .sort({ [sortBy]: sortOrder === 'desc' ? -1 : 1 })
-    .skip(skip)
-    .limit(limitNumber)
-    .populate(
-      'WarehouseDetail',
-      'name location partnerName WarehouseStatus paymentDueDays'
-    )
-    .populate('transactionDetails', 'paymentStatus transactionDate');
+  // Add pagination
+  pipeline.push(
+    { $skip: (pageNumber - 1) * limitNumber },
+    { $limit: limitNumber }
+  );
+
+  // Execute aggregation for orders
+  const orders = await Order.aggregate(pipeline);
 
   if (!orders.length)
     throw new ApiError(404, 'No orders match the given criteria');
 
+  // Populate transactionDetails if needed
+  const populatedOrders = await Order.populate(orders, [
+    { path: 'transactionDetails', select: 'paymentStatus transactionDate' },
+  ]);
+
   return {
-    orders,
+    orders: populatedOrders,
     currentPage: pageNumber,
     totalPages,
+    limit: limitNumber,
     totalOrders,
   };
 };
@@ -200,12 +296,12 @@ const getOrderDetailService = async (orderId) => {
   // Fetch the order with populated WarehouseDetail
   const order = await Order.findById(orderId)
     .populate(
-      'WarehouseDetail',
-      ' name location partnerName areaSqFt price discount WarehouseStatus paymentDueDays address city pincode state country'
+      'WarehouseDetail'
+
       // 'name location partnerName WarehouseStatus address city pincode state country'
     )
     .populate('transactionDetails', 'paymentStatus transactionDate')
-    .populate('partnerDetails', 'name')
+    .populate('partnerDetails', 'name avatar')
     .populate('customerDetails', 'name phone');
 
   // Log the fetched order details for debugging

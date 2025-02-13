@@ -61,7 +61,7 @@ const createOrder = asyncHandler(async (req, res) => {
     // Call the service to create the order
     const { order, razorpayOrder, transaction } = await createOrderService(
       warehouseId,
-      warehouse.rentOrSell === 'Rent' ? duration : 'null', // Pass duration only for Rent
+      warehouse.rentOrSell === 'Rent' ? duration : null, // Pass duration only for Rent
       req.user,
       session
     );
@@ -100,8 +100,18 @@ const createOrder = asyncHandler(async (req, res) => {
 
 const getAllOrderUser = async (req, res, next) => {
   try {
-    const { page, limit, sortBy, sortOrder, orderStatus, warehouseId } =
-      req.query;
+    const {
+      page,
+      limit,
+      sortBy,
+      sortOrder,
+      searchTerm,
+      orderStatus,
+      warehouseId,
+      startDate,
+      endDate,
+      rentOrSell,
+    } = req.query;
     const { _id: userId } = req.user;
 
     // Call the service function and pass parameters
@@ -114,6 +124,10 @@ const getAllOrderUser = async (req, res, next) => {
         sortOrder,
         orderStatus,
         warehouseId,
+        searchTerm,
+        startDate,
+        endDate,
+        rentOrSell,
       });
 
     // Send success response
@@ -123,6 +137,7 @@ const getAllOrderUser = async (req, res, next) => {
         {
           orders,
           currentPage,
+          limit,
           totalPages,
           totalOrders,
         },
