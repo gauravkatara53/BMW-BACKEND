@@ -9,6 +9,7 @@ import {
   getAllTransactionsService,
   rentPaymentService,
 } from '../services/transactionService.js';
+import { Warehouse } from '../models/warehouseModel.js';
 
 export const verifyTransaction = asyncHandler(async (req, res) => {
   const { razorpayPaymentId, razorpayOrderId, razorpaySignature } = req.body;
@@ -333,6 +334,23 @@ export const verifyTransactionRent = asyncHandler(async (req, res) => {
   await Order.findOneAndUpdate(
     { _id: orderId, 'monthlyPayment._id': monthRentId },
     { $set: { 'monthlyPayment.$.paymentStatus': 'Paid' } },
+    { new: true }
+  );
+
+  // Retrieve warehouse details
+  const order = await Order.findById(orderId);
+  if (!order) throw new ApiError(404, 'Order not found');
+
+  const warehouse = await Warehouse.findById(order.WarehouseDetail);
+  if (!warehouse) throw new ApiError(404, 'Warehouse not found');
+
+  // Calculate new payment day
+  const rentRemainderDay = order.paymentDay + warehouse.paymentDueDays;
+
+  // Update order with new payment day
+  await Order.findOneAndUpdate(
+    { _id: order._id },
+    { paymentDay: rentRemainderDay },
     { new: true }
   );
 
