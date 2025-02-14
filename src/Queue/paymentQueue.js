@@ -7,17 +7,16 @@ import { ApiError } from '../utils/ApiError.js';
 
 // Initialize the payment queue with dynamic Redis config
 const redisConfig = {
-  host: process.env.REDIS_HOST || '127.0.0.1',
-  port: process.env.REDIS_PORT || 6379,
+  url: process.env.REDIS_URL,
+  tls: process.env.REDIS_URL.startsWith('rediss://') ? {} : undefined, // Enable TLS for secure Redis connection
 };
-
 const paymentQueue = new Queue('paymentQueue', {
   redis: redisConfig,
   defaultJobOptions: {
-    attempts: 3, // Retry up to 3 times before marking failed
-    backoff: { type: 'exponential', delay: 5000 }, // Exponential backoff for retries
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 5000 },
     removeOnComplete: true,
-    removeOnFail: false, // Keep failed jobs for debugging
+    removeOnFail: false,
   },
 });
 
