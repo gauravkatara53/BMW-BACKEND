@@ -100,12 +100,12 @@ const loginUserService = async (req, res) => {
   );
 
   // Set cookie options
+  const isProduction = process.env.NODE_ENV === 'production';
   const options = {
     httpOnly: true,
-    secure: true, // Set secure only in production
-    sameSite: 'None',
+    secure: isProduction, // Use secure only in production
+    sameSite: isProduction ? 'None' : 'Lax',
     path: '/',
-    domain: '.bmw-user.vercel.app',
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   };
 

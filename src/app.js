@@ -8,7 +8,13 @@ const app = express();
 const allowedOrigins = process.env.CORS_ORIGIN?.split(',') || [];
 
 const corsOptions = {
-  origin: allowedOrigins, // Allow only requests from this origin
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  }, // Allow only requests from this origin
   credentials: true, // Allow cookies and other credentials to be sent
   methods: ['GET', 'POST', 'OPTIONS', 'PUT', 'PATCH'], // Allow GET, POST, and OPTIONS requests
   allowedHeaders: ['Content-Type', 'Authorization'], // Allow Content-Type and Authorization headers
