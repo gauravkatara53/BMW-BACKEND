@@ -102,9 +102,9 @@ const loginUserService = async (req, res) => {
   // Set cookie options
   const options = {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production', // Set to true in production
-    sameSite: 'None', // or 'Lax' depending on your needs
-    path: '/', // Ensure the cookie is available on the entire site
+    secure: true,
+    sameSite: 'None',
+    path: '/',
   };
   // Set cookie options
   // const options = {
