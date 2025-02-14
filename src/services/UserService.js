@@ -102,17 +102,12 @@ const loginUserService = async (req, res) => {
   // Set cookie options
   const options = {
     httpOnly: true,
-    secure: true,
+    secure: true, // Set secure only in production
     sameSite: 'None',
     path: '/',
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   };
-  // Set cookie options
-  // const options = {
-  //   httpOnly: false,
-  //   secure: false, // Local testing
-  //   sameSite: 'Lax',
-  //   path: '/',
-  // };
+
   // Set cookies
   res.cookie('accessToken', accessToken, options);
   res.cookie('refreshToken', refreshToken, options);
