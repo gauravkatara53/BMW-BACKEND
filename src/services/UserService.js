@@ -105,6 +105,7 @@ const loginUserService = async (req, res) => {
     secure: true, // Set secure only in production
     sameSite: 'None',
     path: '/',
+    domain: '.bmw-user.vercel.app',
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   };
 
