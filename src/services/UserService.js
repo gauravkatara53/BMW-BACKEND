@@ -103,7 +103,7 @@ const loginUserService = async (req, res) => {
   const options = {
     httpOnly: true,
     secure: true,
-    sameSite: 'Lax',
+    sameSite: 'None',
     path: '/',
   };
   // Set cookie options
