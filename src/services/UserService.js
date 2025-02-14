@@ -100,19 +100,19 @@ const loginUserService = async (req, res) => {
   );
 
   // Set cookie options
-  // const options = {
-  //   httpOnly: true,
-  //   secure: process.env.NODE_ENV === 'production', // Set to true in production
-  //   sameSite: 'None', // or 'Lax' depending on your needs
-  //   path: '/', // Ensure the cookie is available on the entire site
-  // };
-  // Set cookie options
   const options = {
-    httpOnly: false,
-    secure: false, // Local testing
-    sameSite: 'Lax',
-    path: '/',
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production', // Set to true in production
+    sameSite: 'None', // or 'Lax' depending on your needs
+    path: '/', // Ensure the cookie is available on the entire site
   };
+  // Set cookie options
+  // const options = {
+  //   httpOnly: false,
+  //   secure: false, // Local testing
+  //   sameSite: 'Lax',
+  //   path: '/',
+  // };
   // Set cookies
   res.cookie('accessToken', accessToken, options);
   res.cookie('refreshToken', refreshToken, options);
