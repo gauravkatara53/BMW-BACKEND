@@ -30,6 +30,10 @@ const loginUser = asyncHandler(async (req, res) => {
   );
 });
 
+const isAuthenticatedOrNot = asyncHandler(async (req, res) => {
+  res.status(200).json({ message: 'User is authenticated', user: req.user });
+});
+
 const logoutUser = asyncHandler(async (req, res) => {
   const userId = req.userId; // Assuming userId is set somewhere (middleware or JWT)
 
@@ -136,4 +140,5 @@ export {
   getCurrentUser,
   updateAccountDetails,
   updateUserAvatar,
+  isAuthenticatedOrNot,
 };
