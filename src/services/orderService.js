@@ -3,7 +3,7 @@ import { Order } from '../models/orderModel.js';
 import { Warehouse } from '../models/warehouseModel.js';
 import { Transaction } from '../models/transactionModel.js';
 import { ApiError } from '../utils/ApiError.js';
-import { paymentQueue } from '../Queue/paymentQueue.js';
+import { schedulePaymentJob } from '../Queue/paymentQueue.js';
 import mongoose from 'mongoose';
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
@@ -143,14 +143,7 @@ const createOrderService = async (warehouseId, duration, user, session) => {
     );
   }
 
-  await paymentQueue.add(
-    {
-      orderId: order._id,
-      warehouseId,
-      transactionId: transaction._id,
-    },
-    { delay: 300000 }
-  );
+  await schedulePaymentJob(order._id, warehouseId, transaction._id);
 
   return {
     order,

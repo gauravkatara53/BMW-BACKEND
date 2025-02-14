@@ -23,6 +23,8 @@ const corsOptions = {
 // Apply CORS middleware globally
 app.use(cors(corsOptions));
 
+//job
+
 app.use(express.json({ limit: '16kb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
