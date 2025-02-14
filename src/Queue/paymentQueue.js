@@ -1,34 +1,17 @@
-import Queue from 'bull';
+import { agenda } from './agenda.js';
 import mongoose from 'mongoose';
 import { Order } from '../models/orderModel.js';
 import { Warehouse } from '../models/warehouseModel.js';
 import { Transaction } from '../models/transactionModel.js';
 import { ApiError } from '../utils/ApiError.js';
 
-// Initialize the payment queue with dynamic Redis config
-const redisConfig = {
-  url: process.env.REDIS_URL,
-  tls: process.env.REDIS_URL.startsWith('rediss://') ? {} : undefined, // Enable TLS for secure Redis connection
-};
-const paymentQueue = new Queue('paymentQueue', {
-  redis: redisConfig,
-  defaultJobOptions: {
-    attempts: 3,
-    backoff: { type: 'exponential', delay: 5000 },
-    removeOnComplete: true,
-    removeOnFail: false,
-  },
-});
-
-// Process payment status update jobs
-paymentQueue.process(async (job) => {
-  const { orderId, warehouseId, transactionId } = job.data;
+agenda.define('processPaymentStatus', async (job) => {
+  const { orderId, warehouseId, transactionId } = job.attrs.data;
   const session = await mongoose.startSession();
 
   try {
     session.startTransaction();
 
-    // Fetch order, warehouse, and transaction details
     const order = await Order.findById(orderId).session(session);
     if (!order) throw new ApiError(404, `Order with ID ${orderId} not found`);
 
@@ -41,15 +24,12 @@ paymentQueue.process(async (job) => {
     if (!transaction)
       throw new ApiError(400, `Transaction with ID ${transactionId} not found`);
 
-    // If payment status is 'Pending' or 'Failed', update order and transaction status
     if (
       transaction.paymentStatus === 'Pending' ||
       transaction.paymentStatus === 'Failed'
     ) {
-      await Order.findByIdAndUpdate(
-        orderId,
-        { orderStatus: 'Failed' },
-        { _id: orderId, 'monthlyPayment._id': monthRentId },
+      await Order.updateOne(
+        { _id: orderId, 'monthlyPayment._id': transaction.monthRentId },
         { $set: { 'monthlyPayment.$.paymentStatus': 'Unpaid' } },
         { session }
       );
@@ -57,10 +37,8 @@ paymentQueue.process(async (job) => {
       await Warehouse.findByIdAndUpdate(
         warehouseId,
         { WarehouseStatus: 'Available' },
-
         { session }
       );
-
       await Transaction.findByIdAndUpdate(
         transactionId,
         { paymentStatus: 'Failed' },
@@ -75,24 +53,24 @@ paymentQueue.process(async (job) => {
     await session.commitTransaction();
   } catch (error) {
     await session.abortTransaction();
-
     console.error(
       `Error processing payment status for Order ${orderId}:`,
       error
     );
-
-    // If all retries fail, consider sending an alert or moving job to a dead-letter queue
-    if (job.attemptsMade >= 3) {
-      console.error(
-        `Job ${job.id} failed after multiple retries. Consider manual intervention.`
-      );
-      // Send alert to monitoring system (e.g., Sentry, Datadog, Slack)
-    }
-
-    throw error; // Let Bull retry automatically
+    throw error;
   } finally {
     session.endSession();
   }
 });
 
-export { paymentQueue };
+export const schedulePaymentJob = async (
+  orderId,
+  warehouseId,
+  transactionId
+) => {
+  await agenda.schedule('in 30 seconds', 'processPaymentStatus', {
+    orderId,
+    warehouseId,
+    transactionId,
+  });
+};

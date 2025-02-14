@@ -3,7 +3,7 @@ import { Transaction } from '../models/transactionModel.js';
 import crypto from 'crypto';
 // import { Razorpay } from '../config/razorpayConfig.js';
 import { Order } from '../models/orderModel.js';
-import { rentPaymentQueue } from '../Queue/RentPayment.js';
+import { scheduleRentPaymentJob } from '../Queue/RentPayment.js';
 import { ApiError } from '../utils/ApiError.js';
 import Razorpay from 'razorpay';
 export const createRazorpayOrder = async (amount) => {
@@ -184,13 +184,7 @@ export const rentPaymentService = async (req) => {
       razorpaySignature: null,
     });
 
-    await rentPaymentQueue.add(
-      {
-        orderId: updatedOrder._id,
-        transactionId: transaction._id,
-      },
-      { delay: 300000 } // 5 minutes delay
-    );
+    await scheduleRentPaymentJob(order._id, transaction._id);
 
     return { updatedOrder, razorpayOrder, transaction };
   } catch (error) {
