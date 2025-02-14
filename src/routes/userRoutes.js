@@ -8,6 +8,7 @@ import {
   getCurrentUser,
   updateAccountDetails,
   updateUserAvatar,
+  isAuthenticatedOrNot,
 } from '../controllers/userController.js';
 import { verifyJWT } from '../middlewares/authUserMiddleware.js';
 import { upload } from '../middlewares/multer.js';
@@ -42,6 +43,6 @@ router
 
 //  user side api
 router.route('/home/warehouse').get(allWarehouseController); // Use `.single` for 'avatar' field
-router.route('/get/warehouse-details/:id').get(getWarehouseDetailController);
+router.route('/verify').get(verifyJWT, isAuthenticatedOrNot);
 
 export default router;
