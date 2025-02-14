@@ -100,11 +100,10 @@ const loginUserService = async (req, res) => {
   );
 
   // Set cookie options
-  const isProduction = process.env.NODE_ENV === 'production';
   const options = {
     httpOnly: true,
-    secure: isProduction, // Use secure only in production
-    sameSite: isProduction ? 'None' : 'Lax',
+    secure: true, // Always secure to allow cross-site cookies
+    sameSite: 'None', // Required for cross-site requests
     path: '/',
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   };
