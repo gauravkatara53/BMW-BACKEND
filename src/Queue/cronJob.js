@@ -4,7 +4,7 @@ import { User } from '../models/userModel.js'; // Import User model
 import sendReminder from '../utils/sendReminder.js'; // Function to send emails/SMS
 
 // Run cron job every day at midnight
-cron.schedule('0 0 * * *', async () => {
+cron.schedule('* * * * *', async () => {
   console.log('🔄 Running daily payment reminder cron job...');
 
   try {
