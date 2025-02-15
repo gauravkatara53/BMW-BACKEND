@@ -68,7 +68,7 @@ export const schedulePaymentJob = async (
   warehouseId,
   transactionId
 ) => {
-  await agenda.schedule('in 30 seconds', 'processPaymentStatus', {
+  await agenda.schedule('in 10 minute', 'processPaymentStatus', {
     orderId,
     warehouseId,
     transactionId,
