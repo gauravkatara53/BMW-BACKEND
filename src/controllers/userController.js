@@ -9,6 +9,7 @@ import {
   updateUserAvatarService,
 } from '../services/UserService.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
+import NodeCache from 'node-cache';
 
 const registerUser = asyncHandler(async (req, res) => {
   const createdUser = await registerUserService(req);
@@ -103,10 +104,40 @@ const changeCurrentPassword = asyncHandler(async (req, res) => {
   );
 });
 
+const cache = new NodeCache({ stdTTL: 600, checkperiod: 120 }); // Cache expires in 10 minutes
+
 const getCurrentUser = asyncHandler(async (req, res) => {
+  const startTime = Date.now(); // Start timer
+  const userId = req.user?._id?.toString();
+
+  if (!userId) {
+    return res.status(400).json({ message: 'User ID is required' });
+  }
+
+  const cacheKey = `user_${userId}`;
+  console.log('Checking cache for:', cacheKey);
+
+  const cachedUser = cache.get(cacheKey);
+  if (cachedUser) {
+    console.log('Cache hit ✅', cachedUser);
+    console.log('Response time (cached):', Date.now() - startTime, 'ms');
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(200, cachedUser, 'User fetched successfully (cached)')
+      );
+  }
+
+  console.log('Cache miss ❌ Fetching from DB...');
+  const userObject = JSON.parse(JSON.stringify(req.user));
+
+  cache.set(cacheKey, userObject);
+  console.log('User cached ✅', userObject);
+  console.log('Response time (DB fetch):', Date.now() - startTime, 'ms');
+
   return res
     .status(200)
-    .json(new ApiResponse(200, req.user, 'User fetched successfully'));
+    .json(new ApiResponse(200, userObject, 'User fetched successfully'));
 });
 
 const updateAccountDetails = asyncHandler(async (req, res) => {
