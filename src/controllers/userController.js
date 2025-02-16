@@ -11,6 +11,8 @@ import {
 import { ApiResponse } from '../utils/ApiResponse.js';
 import NodeCache from 'node-cache';
 
+const cache = new NodeCache({ stdTTL: 600, checkperiod: 120 }); // Cache expires in 10 minutes
+
 const registerUser = asyncHandler(async (req, res) => {
   const createdUser = await registerUserService(req);
   return res
@@ -32,7 +34,29 @@ const loginUser = asyncHandler(async (req, res) => {
 });
 
 const isAuthenticatedOrNot = asyncHandler(async (req, res) => {
-  res.status(200).json({ message: 'User is authenticated', user: req.user });
+  const userId = req.user?._id;
+  if (!userId) {
+    return res.status(400).json({ message: 'User ID is required' });
+  }
+
+  const cacheKey = `auth_${userId}`;
+
+  // Check cache first
+  const cachedAuth = cache.get(cacheKey);
+  if (cachedAuth) {
+    return res.status(200).json({
+      message: 'User is authenticated (cached)',
+      user: cachedAuth,
+    });
+  }
+
+  // Store authentication info in cache
+  cache.set(cacheKey, req.user);
+
+  return res.status(200).json({
+    message: 'User is authenticated',
+    user: req.user,
+  });
 });
 
 const logoutUser = asyncHandler(async (req, res) => {
@@ -103,8 +127,6 @@ const changeCurrentPassword = asyncHandler(async (req, res) => {
     )
   );
 });
-
-const cache = new NodeCache({ stdTTL: 600, checkperiod: 120 }); // Cache expires in 10 minutes
 
 const getCurrentUser = asyncHandler(async (req, res) => {
   const startTime = Date.now(); // Start timer
