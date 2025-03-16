@@ -11,6 +11,8 @@ import {
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { ApiError } from '../utils/ApiError.js';
+import { Warehouse } from '../models/warehouseModel.js';
+import { Partner } from '../models/partnerModel.js';
 
 const createWarehouse = asyncHandler(async (req, res) => {
   const createdWarehouse = await createWarehouseService(req); // Remove res from here
@@ -192,6 +194,85 @@ const getCardDetaiWarehouse = asyncHandler(async (req, res) => {
   }
 });
 
+const featuredWarehouse = asyncHandler(async (req, res) => {
+  try {
+    // Get rentOrSell filter from query params, default to both Rent and Sell if not specified
+    const rentOrSellFilter = req.query.rentOrSell ? [req.query.rentOrSell] : ['Rent', 'Sell'];
+
+    // Find extra premium partners first
+    const extraPremiumPartners = await Partner.find({
+      status: 'extra premium',
+    }).select('_id');
+
+    // Find premium partners
+    const premiumPartners = await Partner.find({
+      status: 'premium',
+    }).select('_id');
+
+    // Get warehouse listings from extra premium partners
+    const extraPremiumWarehouses = await Warehouse.find({
+      partner: { $in: extraPremiumPartners.map((p) => p._id) },
+      WarehouseStatus: 'Available',
+      rentOrSell: { $in: rentOrSellFilter }
+    })
+      .populate('partnerName', 'name email phone status')
+      .sort({ createdAt: -1 });
+
+    // Get warehouse listings from premium partners
+    const premiumWarehouses = await Warehouse.find({
+      partner: { $in: premiumPartners.map((p) => p._id) },
+      WarehouseStatus: 'Available',
+      rentOrSell: { $in: rentOrSellFilter }
+    })
+      .populate('partnerName', 'name email phone status')
+      .sort({ createdAt: -1 });
+
+    // Combine the results with extra premium first
+    const featuredWarehouses = [
+      ...extraPremiumWarehouses,
+      ...premiumWarehouses,
+    ];
+
+    // If no warehouses found, try getting all available warehouses
+    if (!featuredWarehouses.length) {
+      const allAvailableWarehouses = await Warehouse.find({
+        WarehouseStatus: 'Available',
+        rentOrSell: { $in: rentOrSellFilter }
+      })
+        .populate('partnerName', 'name email phone status')
+        .sort({ createdAt: -1 })
+        .limit(10); // Limit to 10 warehouses as fallback
+
+      if (allAvailableWarehouses.length) {
+        return res
+          .status(200)
+          .json(
+            new ApiResponse(
+              200,
+              allAvailableWarehouses,
+              'Available warehouses fetched successfully'
+            )
+          );
+      }
+    }
+
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(
+          200,
+          featuredWarehouses,
+          'Featured warehouses fetched successfully'
+        )
+      );
+  } catch (error) {
+    console.error('Error in featuredWarehouse:', error);
+    return res
+      .status(500)
+      .json(new ApiResponse(500, null, 'Failed to fetch featured warehouses'));
+  }
+});
+
 export {
   createWarehouse,
   uploadImageController,
@@ -201,4 +282,5 @@ export {
   allWarehouseController,
   getAllPartnerWarehouseController,
   getCardDetaiWarehouse,
+  featuredWarehouse,
 };

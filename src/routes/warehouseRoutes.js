@@ -8,6 +8,7 @@ import {
   allWarehouseController,
   getAllPartnerWarehouseController,
   getCardDetaiWarehouse,
+  featuredWarehouse,
 } from '../controllers/warehouseController.js';
 import { verifyJWTPartner } from '../middlewares/authPartnerMiddleware.js';
 import { verifyPartnerKyc } from '../middlewares/partnerMiddleware.js';
@@ -59,4 +60,8 @@ router
 router
   .route('/admin/get/warehouse/card')
   .get(verifyJWTAdmin, verifyAdmin, getCardDetaiWarehouse);
+
+  // for all 
+router.route('/user/get/warehouse/featured').get(featuredWarehouse);
+
 export default router;
