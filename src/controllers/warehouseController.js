@@ -197,7 +197,9 @@ const getCardDetaiWarehouse = asyncHandler(async (req, res) => {
 const featuredWarehouse = asyncHandler(async (req, res) => {
   try {
     // Get rentOrSell filter from query params, default to both Rent and Sell if not specified
-    const rentOrSellFilter = req.query.rentOrSell ? [req.query.rentOrSell] : ['Rent', 'Sell'];
+    const rentOrSellFilter = req.query.rentOrSell
+      ? [req.query.rentOrSell]
+      : ['Rent', 'Sell'];
 
     // Find extra premium partners first
     const extraPremiumPartners = await Partner.find({
@@ -213,7 +215,7 @@ const featuredWarehouse = asyncHandler(async (req, res) => {
     const extraPremiumWarehouses = await Warehouse.find({
       partner: { $in: extraPremiumPartners.map((p) => p._id) },
       WarehouseStatus: 'Available',
-      rentOrSell: { $in: rentOrSellFilter }
+      rentOrSell: { $in: rentOrSellFilter },
     })
       .populate('partnerName', 'name email phone status')
       .sort({ createdAt: -1 });
@@ -222,7 +224,7 @@ const featuredWarehouse = asyncHandler(async (req, res) => {
     const premiumWarehouses = await Warehouse.find({
       partner: { $in: premiumPartners.map((p) => p._id) },
       WarehouseStatus: 'Available',
-      rentOrSell: { $in: rentOrSellFilter }
+      rentOrSell: { $in: rentOrSellFilter },
     })
       .populate('partnerName', 'name email phone status')
       .sort({ createdAt: -1 });
@@ -237,9 +239,9 @@ const featuredWarehouse = asyncHandler(async (req, res) => {
     if (!featuredWarehouses.length) {
       const allAvailableWarehouses = await Warehouse.find({
         WarehouseStatus: 'Available',
-        rentOrSell: { $in: rentOrSellFilter }
+        rentOrSell: { $in: rentOrSellFilter },
       })
-        .populate('partnerName', 'name email phone status')
+        .populate('partnerName', 'avatar name email phone status')
         .sort({ createdAt: -1 })
         .limit(10); // Limit to 10 warehouses as fallback
 
