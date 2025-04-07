@@ -12,6 +12,7 @@ import {
   getPartnerProfileService,
 } from '../services/partnerService.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
+import { Partner } from '../models/partnerModel.js';
 
 const registerPartner = asyncHandler(async (req, res) => {
   const createdPartner = await registerPartnerService(req);
@@ -230,6 +231,41 @@ const getPartnerProfile = asyncHandler(async (req, res) => {
   }
 });
 
+const getCardDetailPartnerCustomer = asyncHandler(async (req, res) => {
+  try {
+    // Call the service function to get statistics
+    const totalPartners = await Partner.countDocuments();
+    const activePartner = await Partner.countDocuments({
+      kycStatus: 'Verified',
+    });
+
+    const kycNotUploaded = await Partner.countDocuments({
+      kycStatus: 'Pending',
+    });
+    const membershipNotPaid = await Partner.countDocuments({
+      status: 'normal',
+    });
+    // Respond with the data
+    return res.status(200).json(
+      new ApiResponse(
+        200,
+        {
+          totalPartners,
+          activePartner,
+          kycNotUploaded,
+          membershipNotPaid,
+        },
+        'Partners fetched successfully.'
+      )
+    );
+  } catch (error) {
+    // Handle errors
+    return res
+      .status(500)
+      .json(new ApiResponse(500, null, 'Failed to fetch partner details.'));
+  }
+});
+
 export {
   registerPartner,
   loginPartner,
@@ -242,4 +278,5 @@ export {
   getAllPartnerWithStatus,
   getCardDetailPartner,
   getPartnerProfile,
+  getCardDetailPartnerCustomer,
 };

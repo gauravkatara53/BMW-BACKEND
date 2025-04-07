@@ -7,8 +7,10 @@ import {
   changeCurrentPasswordService,
   updateAccountDetailsService,
   updateUserAvatarService,
+  getAllUsersService,
 } from '../services/UserService.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
+import { User } from '../models/userModel.js';
 
 const registerUser = asyncHandler(async (req, res) => {
   const createdUser = await registerUserService(req);
@@ -131,6 +133,76 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, user, 'Avatar image updated successfully'));
 });
 
+const getAllUser = asyncHandler(async (req, res) => {
+  const {
+    page = 1,
+    limit = 10,
+    sortBy = 'createdAt',
+    sortOrder = 'desc',
+    search,
+    status,
+  } = req.query;
+
+  const result = await getAllUsersService({
+    page: parseInt(page),
+    limit: parseInt(limit),
+    sortBy,
+    sortOrder,
+    search,
+    status,
+  });
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, result, 'Users fetched successfully'));
+});
+
+const getCardDetailUserCustomer = asyncHandler(async (req, res) => {
+  try {
+    const now = new Date();
+
+    // Start of the current month
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    // Start of the current year
+    const startOfYear = new Date(now.getFullYear(), 0, 1);
+
+    // Call the service function to get statistics
+    const totalUser = await User.countDocuments();
+
+    const thisMonthUser = await User.countDocuments({
+      createdAt: { $gte: startOfMonth },
+    });
+
+    const thisYearUser = await User.countDocuments({
+      createdAt: { $gte: startOfYear },
+    });
+
+    const membershipNotPaid = await User.countDocuments({
+      status: 'normal', // Adjust this condition based on your status schema
+    });
+
+    // Respond with the data
+    return res.status(200).json(
+      new ApiResponse(
+        200,
+        {
+          totalUser,
+          thisMonthUser,
+          thisYearUser,
+          membershipNotPaid,
+        },
+        'User statistics fetched successfully.'
+      )
+    );
+  } catch (error) {
+    console.error('Error fetching user stats:', error);
+    return res
+      .status(500)
+      .json(new ApiResponse(500, null, 'Failed to fetch user statistics.'));
+  }
+});
+
 export {
   registerUser,
   loginUser,
@@ -141,4 +213,6 @@ export {
   updateAccountDetails,
   updateUserAvatar,
   isAuthenticatedOrNot,
+  getAllUser,
+  getCardDetailUserCustomer,
 };

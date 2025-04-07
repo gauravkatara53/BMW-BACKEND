@@ -19,13 +19,20 @@ import {
   verifyAdmin,
   verifyOtherAdminBySuperAdmin,
 } from '../middlewares/adminVerificationMiddleware.js';
-import { getCardDetailPartner } from '../controllers/partnerController.js';
+import {
+  getCardDetailPartner,
+  getCardDetailPartnerCustomer,
+} from '../controllers/partnerController.js';
 import {
   recentTransactionsController,
   allTransactionsController,
   transactionCardDetails,
 } from '../controllers/transactionController.js';
 import { recentOdersController } from '../controllers/orderController.js';
+import {
+  getAllUser,
+  getCardDetailUserCustomer,
+} from '../controllers/userController.js';
 const router = Router();
 
 router.route('/register').post(
@@ -93,4 +100,13 @@ router
   .route('/card/transactions')
   .get(verifyJWTAdmin, verifyAdmin, transactionCardDetails);
 
+router.route('/get/all/user').get(verifyJWTAdmin, verifyAdmin, getAllUser);
+router
+  .route('/get/partner/customer/data')
+  .get(verifyJWTAdmin, verifyAdmin, getCardDetailPartnerCustomer);
+
+router
+  .route('/get/user/customer/data')
+  .get(verifyJWTAdmin, verifyAdmin, getCardDetailUserCustomer);
+getCardDetailUserCustomer;
 export default router;
