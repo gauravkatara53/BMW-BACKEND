@@ -10,6 +10,7 @@ import {
   updatePartnerAvatar,
   getAllPartnerWithStatus,
   getPartnerProfile,
+  isAuthenticatedOrNot,
 } from '../controllers/partnerController.js';
 import { verifyJWTPartner } from '../middlewares/authPartnerMiddleware.js';
 import { upload } from '../middlewares/multer.js';
@@ -45,4 +46,6 @@ router.route('/all-partner').get(verifyJWTAdmin, getAllPartnerWithStatus);
 router
   .route('/admin/partner/profile/:partnerId')
   .get(verifyJWTAdmin, verifyAdmin, getPartnerProfile);
+
+router.route('/verify').get(verifyJWTPartner, isAuthenticatedOrNot);
 export default router;
