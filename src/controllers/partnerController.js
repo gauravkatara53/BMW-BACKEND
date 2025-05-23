@@ -266,6 +266,11 @@ const getCardDetailPartnerCustomer = asyncHandler(async (req, res) => {
   }
 });
 
+const isAuthenticatedOrNot = asyncHandler(async (req, res) => {
+  res
+    .status(200)
+    .json({ message: 'Partner is authenticated', partner: req.partner });
+});
 export {
   registerPartner,
   loginPartner,
@@ -279,4 +284,5 @@ export {
   getCardDetailPartner,
   getPartnerProfile,
   getCardDetailPartnerCustomer,
+  isAuthenticatedOrNot,
 };
