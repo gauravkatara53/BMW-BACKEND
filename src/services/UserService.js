@@ -268,6 +268,47 @@ const updateUserAvatarService = async (userId, avatarLocalPath) => {
   return user;
 };
 
+const getAllUsersService = async ({
+  page = 1,
+  limit = 10,
+  sortBy = 'createdAt',
+  sortOrder = 'desc',
+  search,
+  status,
+}) => {
+  const filters = {};
+
+  if (status) filters.status = status;
+
+  if (search) {
+    const searchRegex = new RegExp(search, 'i');
+    filters.$or = [
+      { name: { $regex: searchRegex } },
+      { username: { $regex: searchRegex } },
+      { email: { $regex: searchRegex } },
+      { phone: { $regex: searchRegex } },
+    ];
+  }
+
+  const skip = (page - 1) * limit;
+
+  const users = await User.find(filters)
+    .select('-password -refreshToken')
+    .sort({ [sortBy]: sortOrder === 'desc' ? -1 : 1 })
+    .skip(skip)
+    .limit(Number(limit));
+
+  const totalUsers = await User.countDocuments(filters);
+
+  return {
+    users,
+    totalUsers,
+    currentPage: page,
+    limit,
+    totalPages: Math.ceil(totalUsers / limit),
+  };
+};
+
 export {
   registerUserService,
   loginUserService,
@@ -276,4 +317,5 @@ export {
   changeCurrentPasswordService,
   updateAccountDetailsService,
   updateUserAvatarService,
+  getAllUsersService,
 };

@@ -45,4 +45,5 @@ router
 router.route('/home/warehouse').get(allWarehouseController); // Use `.single` for 'avatar' field
 router.route('/get/warehouse-details/:id').get(getWarehouseDetailController);
 router.route('/verify').get(verifyJWT, isAuthenticatedOrNot);
+
 export default router;
