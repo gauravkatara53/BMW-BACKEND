@@ -110,9 +110,10 @@ const loginPartnerService = async (req, res) => {
   // Set cookie options
   const options = {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production', // Set to true in production
-    sameSite: 'None', // or 'Lax' depending on your needs
-    path: '/', // Ensure the cookie is available on the entire site
+    secure: true, // Always secure to allow cross-site cookies
+    sameSite: 'None', // Required for cross-site requests
+    path: '/',
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   };
 
   // Set cookies
