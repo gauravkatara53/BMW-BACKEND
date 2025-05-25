@@ -11,6 +11,7 @@ import {
   getAllPartnerWithStatus,
   getPartnerProfile,
   isAuthenticatedOrNot,
+  Bookingstatic,
 } from '../controllers/partnerController.js';
 import { verifyJWTPartner } from '../middlewares/authPartnerMiddleware.js';
 import { upload } from '../middlewares/multer.js';
@@ -48,4 +49,6 @@ router
   .get(verifyJWTAdmin, verifyAdmin, getPartnerProfile);
 
 router.route('/verify').get(verifyJWTPartner, isAuthenticatedOrNot);
+
+router.route('/partner/stats').get(verifyJWTPartner, Bookingstatic);
 export default router;

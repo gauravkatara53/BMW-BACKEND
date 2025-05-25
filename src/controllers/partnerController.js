@@ -13,6 +13,7 @@ import {
 } from '../services/partnerService.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { Partner } from '../models/partnerModel.js';
+import { Warehouse } from '../models/warehouseModel.js';
 
 const registerPartner = asyncHandler(async (req, res) => {
   const createdPartner = await registerPartnerService(req);
@@ -271,6 +272,87 @@ const isAuthenticatedOrNot = asyncHandler(async (req, res) => {
     .status(200)
     .json({ message: 'Partner is authenticated', partner: req.partner });
 });
+
+const Bookingstatic = asyncHandler(async (req, res) => {
+  const partnerId = req.partner?._id; // Extract partner ID from request
+  if (!partnerId) {
+    throw new ApiError(400, 'Partner ID is required');
+  }
+
+  const partner = await Partner.findById(partnerId);
+  if (!partner) {
+    throw new ApiError(404, 'Partner not found');
+  }
+
+  try {
+    const totalRented = await Warehouse.countDocuments({
+      WarehouseStatus: 'Rented',
+      partnerName: partnerId, // Filter by this partner
+    });
+
+    const totalSold = await Warehouse.countDocuments({
+      WarehouseStatus: 'Sold',
+      partnerName: partnerId,
+    });
+
+    const totalAvailable = await Warehouse.countDocuments({
+      WarehouseStatus: 'Available',
+      partnerName: partnerId,
+    });
+
+    return res.status(200).json(
+      new ApiResponse(
+        200,
+        {
+          totalRented,
+          totalSold,
+          totalAvailable,
+        },
+        'Warehouse booking statistics fetched successfully'
+      )
+    );
+  } catch (error) {
+    throw new ApiError(500, 'Failed to fetch warehouse booking statistics');
+  }
+});
+
+// const Earningstatic = asyncHandler(async (req, res) => {
+//   const partnerId = req.partner?._id; // Extract partner ID from request
+//   if (!partnerId) {
+//     throw new ApiError(400, 'Partner ID is required');
+//   }
+
+//   const partner = await Partner.findById(partnerId);
+//   if (!partner) {
+//     throw new ApiError(404, 'Partner not found');
+//   }
+
+//   try {
+//     const totalRented = await Warehouse.countDocuments({
+//       WarehouseStatus: 'Rented',
+//       partnerName: partnerId, // Filter by this partner
+//     });
+
+//     const totalSold = await Warehouse.countDocuments({
+//       WarehouseStatus: 'Sold',
+//       partnerName: partnerId,
+//     });
+
+//     const totalAvailable = await Warehouse.countDocuments({
+//       WarehouseStatus: 'Available',
+//       partnerName: partnerId,
+//     });
+
+//     res.json({
+//       totalRented,
+//       totalSold,
+//       totalAvailable,
+//     });
+//   } catch (error) {
+//     throw new ApiError(500, 'Failed to fetch warehouse booking statistics');
+//   }
+// });
+
 export {
   registerPartner,
   loginPartner,
@@ -285,4 +367,5 @@ export {
   getPartnerProfile,
   getCardDetailPartnerCustomer,
   isAuthenticatedOrNot,
+  Bookingstatic,
 };
