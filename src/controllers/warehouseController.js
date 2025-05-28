@@ -13,6 +13,8 @@ import { ApiResponse } from '../utils/ApiResponse.js';
 import { ApiError } from '../utils/ApiError.js';
 import { Warehouse } from '../models/warehouseModel.js';
 import { Partner } from '../models/partnerModel.js';
+import { User } from '../models/userModel.js';
+import { Order } from '../models/orderModel.js';
 
 const createWarehouse = asyncHandler(async (req, res) => {
   const createdWarehouse = await createWarehouseService(req); // Remove res from here
@@ -275,6 +277,85 @@ const featuredWarehouse = asyncHandler(async (req, res) => {
   }
 });
 
+const checkCurrentUserWarehouse = async (req, res, next) => {
+  try {
+    const warehouseId = req.params.id;
+
+    if (!warehouseId) {
+      throw new ApiError(400, 'Warehouse ID is required.');
+    }
+
+    // Find all active orders for this warehouse (endDate > now)
+    const activeOrders = await Order.find({
+      WarehouseDetail: warehouseId,
+      endDate: { $gt: new Date() }, // Active orders only
+    });
+
+    if (!activeOrders.length) {
+      throw new ApiError(404, 'No active order found for the given warehouse.');
+    }
+
+    // Pick the first active order (or you can decide logic to pick)
+    const order = activeOrders[0];
+
+    if (!order.customerDetails) {
+      throw new ApiError(404, 'Customer information not found in order.');
+    }
+
+    const customerDetail = await User.findById(order.customerDetails);
+
+    if (!customerDetail) {
+      throw new ApiError(404, 'Customer not found.');
+    }
+
+    // Remove sensitive info
+    const { password, refreshToken, ...safeCustomer } =
+      customerDetail.toObject();
+
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(
+          200,
+          safeCustomer,
+          'Active order customer details fetched successfully'
+        )
+      );
+  } catch (error) {
+    next(error);
+  }
+};
+
+const historyListWarehouse = asyncHandler(async (req, res) => {
+  const warehouseId = req.params.id;
+
+  if (!warehouseId) {
+    throw new ApiError(400, 'Warehouse ID is required.');
+  }
+
+  // Find all orders for the warehouse, populate customer details
+  const orders = await Order.find({ WarehouseDetail: warehouseId })
+    .populate('customerDetails', '-password -refreshToken') // exclude sensitive fields
+    .select('customerDetails startDate endDate'); // only select these fields
+
+  if (!orders.length) {
+    throw new ApiError(404, 'No orders found for the given warehouse.');
+  }
+
+  // Format response: map to a simpler structure
+  const history = orders.map((order) => ({
+    customer: order.customerDetails,
+    startDate: order.startDate,
+    endDate: order.endDate,
+  }));
+
+  return res.status(200).json({
+    status: 200,
+    data: history,
+    message: `Order history for warehouse ${warehouseId} fetched successfully`,
+  });
+});
+
 export {
   createWarehouse,
   uploadImageController,
@@ -285,4 +366,6 @@ export {
   getAllPartnerWarehouseController,
   getCardDetaiWarehouse,
   featuredWarehouse,
+  checkCurrentUserWarehouse,
+  historyListWarehouse,
 };

@@ -4,6 +4,7 @@ import { ApiError } from '../utils/ApiError.js'; // assuming you have a custom e
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { uploadOnCloudinary } from '../utils/cloudinary.js';
 import crypto from 'crypto';
+import { Order } from '../models/orderModel.js';
 
 const createWarehouseService = async (req) => {
   try {
@@ -450,6 +451,9 @@ const warehouseStaticService = async () => {
     throw new Error('Failed to fetch warehouse statistics');
   }
 };
+
+
+
 
 export {
   createWarehouseService,
