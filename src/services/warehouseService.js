@@ -310,22 +310,20 @@ const getAllWarehousePartner = async (req) => {
   } = req.query;
 
   // Construct filter based on query parameters
-  const filter = {};
+  const filter = {
+    partnerName: partnerId, // Ensure filtering by signed-in partner
+  };
+
   if (category) filter.category = category;
   if (WarehouseStatus) filter.WarehouseStatus = WarehouseStatus;
 
-  // Calculate pagination
   const pageNumber = parseInt(page, 10);
   const limitNumber = parseInt(limit, 10);
   const skip = (pageNumber - 1) * limitNumber;
 
-  // Fetch total count of warehouses for pagination
   const totalWarehouses = await Warehouse.countDocuments(filter);
-
-  // Calculate total pages
   const totalPages = Math.ceil(totalWarehouses / limitNumber);
 
-  // Fetch warehouses with filter, sorting, and pagination
   const warehouses = await Warehouse.find(filter)
     .sort({ [sortBy]: sortOrder === 'desc' ? -1 : 1 })
     .skip(skip)
