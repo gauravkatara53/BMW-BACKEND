@@ -100,7 +100,7 @@ export const getRecentTransactionsService = async () => {
       paymentMethod: t.paymentMethod,
       paymentStatus: t.paymentStatus,
       createdBy: t.createdBy?.name || 'Unknown',
-      warehouseName: t.warehouseId?.name || 'Unknown',
+      nameWarehouse: t.warehouseId?.name || 'Unknown',
       amount: t.totalPrice || 0,
       isdebited: t.isDebited || false,
     }));
@@ -122,7 +122,7 @@ export const getRecentTransactionsService = async () => {
       paymentMethod: p.paymentMethod || 'Manual/Auto',
       paymentStatus: p.status,
       createdBy: 'Admin',
-      warehouseName: p.warehouseId?.name || 'Unknown',
+      nameWarehouse: p.warehouseId?.name || 'Unknown',
       amount: p.totalPrice || 0,
       isdebited: p.isDebited ?? true, // Default to debited if not defined
     }));
