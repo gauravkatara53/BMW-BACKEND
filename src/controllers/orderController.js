@@ -373,6 +373,130 @@ const recentOdersController = asyncHandler(async (req, res) => {
   }
 });
 
+const allOrderOfPartner = asyncHandler(async (req, res) => {
+  const { partnerId } = req.params;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+
+  if (!partnerId) {
+    throw new ApiError(400, 'Partner ID is required');
+  }
+
+  const skip = (page - 1) * limit;
+
+  // Fetch orders with pagination and sorting by most recent
+  const orders = await Order.find({ partnerDetails: partnerId })
+    .populate('WarehouseDetail', 'name location paymentDueDays rentOrSell ')
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit);
+
+  const totalOrders = await Order.countDocuments({ partnerDetails: partnerId });
+
+  if (!orders || orders.length === 0) {
+    return res
+      .status(404)
+      .json(new ApiResponse(404, null, 'No orders found for this partner'));
+  }
+
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      {
+        orders,
+        totalOrders,
+        page,
+        limit,
+        totalPages: Math.ceil(totalOrders / limit),
+      },
+      'Orders fetched successfully'
+    )
+  );
+});
+
+const allOrderOfUser = asyncHandler(async (req, res) => {
+  const { userId } = req.params;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+
+  if (!userId) {
+    throw new ApiError(400, 'Partner ID is required');
+  }
+
+  const skip = (page - 1) * limit;
+
+  // Fetch orders with pagination and sorting by most recent
+  const orders = await Order.find({ customerDetails: userId })
+    .populate('WarehouseDetail', 'name location paymentDueDays rentOrSell ')
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit);
+
+  const totalOrders = await Order.countDocuments({ customerDetails: userId });
+
+  if (!orders || orders.length === 0) {
+    return res
+      .status(404)
+      .json(new ApiResponse(404, null, 'No orders found for this partner'));
+  }
+
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      {
+        orders,
+        totalOrders,
+        page,
+        limit,
+        totalPages: Math.ceil(totalOrders / limit),
+      },
+      'Orders fetched successfully'
+    )
+  );
+});
+const allOrderOfWarehouse = asyncHandler(async (req, res) => {
+  const { warehouseId } = req.params;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+
+  if (!warehouseId) {
+    throw new ApiError(400, 'Partner ID is required');
+  }
+
+  const skip = (page - 1) * limit;
+
+  // Fetch orders with pagination and sorting by most recent
+  const orders = await Order.find({ WarehouseDetail: warehouseId })
+    .populate('WarehouseDetail', 'name location paymentDueDays rentOrSell ')
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit);
+
+  const totalOrders = await Order.countDocuments({
+    WarehouseDetail: warehouseId,
+  });
+
+  if (!orders || orders.length === 0) {
+    return res
+      .status(404)
+      .json(new ApiResponse(404, null, 'No orders found for this partner'));
+  }
+
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      {
+        orders,
+        totalOrders,
+        page,
+        limit,
+        totalPages: Math.ceil(totalOrders / limit),
+      },
+      'Orders fetched successfully'
+    )
+  );
+});
+
 export {
   createOrder,
   getAllOrderUser,
@@ -382,4 +506,7 @@ export {
   getAllOrders,
   getCardDetailOrder,
   recentOdersController,
+  allOrderOfPartner,
+  allOrderOfUser,
+  allOrderOfWarehouse,
 };

@@ -13,6 +13,11 @@ const orderSchema = new mongoose.Schema(
       required: true,
       default: 'Pending', // Default value
     },
+    paymentFromBMWSold: {
+      type: String,
+      enum: ['Paid', 'Unpaid', 'Processing'],
+      default: 'Unpaid',
+    },
     duration: {
       type: Number,
     },
@@ -39,7 +44,12 @@ const orderSchema = new mongoose.Schema(
         },
         paymentStatus: {
           type: String,
-          enum: ['Paid', 'Unpaid','Processing'],
+          enum: ['Paid', 'Unpaid', 'Processing'],
+          default: 'Unpaid',
+        },
+        paymentForPartnerByBMW: {
+          type: String,
+          enum: ['Paid', 'Unpaid', 'Processing'],
           default: 'Unpaid',
         },
       },

@@ -32,6 +32,7 @@ import { recentOdersController } from '../controllers/orderController.js';
 import {
   getAllUser,
   getCardDetailUserCustomer,
+  getUserDataById,
 } from '../controllers/userController.js';
 const router = Router();
 
@@ -109,4 +110,8 @@ router
   .route('/get/user/customer/data')
   .get(verifyJWTAdmin, verifyAdmin, getCardDetailUserCustomer);
 getCardDetailUserCustomer;
+
+router
+  .route('/get/user/customer/data/:userId')
+  .get(verifyJWTAdmin, verifyAdmin, getUserDataById);
 export default router;

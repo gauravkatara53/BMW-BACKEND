@@ -52,6 +52,7 @@ const getWarehouseDetailController = asyncHandler(async (req, res) => {
     );
 });
 
+
 const changeWarehouseStatusController = asyncHandler(async (req, res) => {
   // Call the service with the entire request object
   const updatedWarehouse = await changeWarehouseStatus(req);

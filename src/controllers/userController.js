@@ -203,6 +203,21 @@ const getCardDetailUserCustomer = asyncHandler(async (req, res) => {
   }
 });
 
+const getUserDataById = asyncHandler(async (req, res) => {
+  const { userId } = req.params; // Get user ID from request parameters
+
+  // Fetch user data by ID
+  const user = await User.findById(userId).select('-password -refreshToken'); // Exclude password field
+
+  if (!user) {
+    return res.status(404).json(new ApiResponse(404, null, 'User not found'));
+  }
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, user, 'User data fetched successfully'));
+});
+
 export {
   registerUser,
   loginUser,
@@ -215,4 +230,5 @@ export {
   isAuthenticatedOrNot,
   getAllUser,
   getCardDetailUserCustomer,
+  getUserDataById,
 };

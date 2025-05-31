@@ -56,8 +56,21 @@ const createOrderService = async (warehouseId, duration, user, session) => {
       });
     }
   }
+  // Generate a unique order ID
+  const userName = String(user?.username || user?.name || 'UnknownUser');
+  const warehouseName = String(warehouse?.name || 'UnknownWarehouse');
+  const partnerName = String(warehouse?.partnerName || 'UnknownPartner');
 
-  const uniqueOrderId = `ORD-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+  // Use last 3 digits of timestamp for semi-unique 3-digit number
+  const threeDigitNumber = Date.now().toString().slice(-3);
+
+  const getNameMix = (a, b, c) => {
+    const clean = (str) =>
+      String(str).replace(/\s+/g, '').slice(0, 3).toUpperCase();
+    return `${clean(a)}${clean(b)}${clean(c)}`;
+  };
+
+  const uniqueOrderId = `BMW${threeDigitNumber}${getNameMix(partnerName, userName, warehouseName)}`;
 
   const [order] = await Order.create([
     {
@@ -227,6 +240,7 @@ const getAllUserOrdersService = async ({
           { 'partnerDetails.name': searchRegex },
           { 'partnerDetails.email': searchRegex },
           { 'partnerDetails.phone': searchRegex },
+          { 'orderId': searchRegex },
         ],
       },
     });
