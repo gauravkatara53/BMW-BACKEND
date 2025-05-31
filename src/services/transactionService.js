@@ -6,6 +6,7 @@ import { Order } from '../models/orderModel.js';
 import { scheduleRentPaymentJob } from '../Queue/RentPayment.js';
 import { ApiError } from '../utils/ApiError.js';
 import Razorpay from 'razorpay';
+import { BMWToPartnerPayment } from '../models/BMWToPartnerPayment.js';
 export const createRazorpayOrder = async (amount) => {
   const options = {
     amount: amount * 100, // Convert to smallest currency unit
@@ -63,16 +64,75 @@ export const updateOrderPaymentStatus = async (orderId, status) => {
 };
 
 // recent 10 Transactions
+// export const getRecentTransactionsService = async () => {
+//   try {
+//     const transactions = await Transaction.find()
+//       .sort({ transactionDate: -1 }) // Ascending order
+//       .limit(10)
+//       .populate('orderId', 'orderStatus')
+//       .populate('createdBy', 'name')
+//       .populate('warehouseId', 'name');
+
+//     return transactions;
+//   } catch (error) {
+//     console.error('Error fetching recent transactions:', error);
+//     throw new Error('Failed to fetch recent transactions');
+//   }
+// };
 export const getRecentTransactionsService = async () => {
   try {
+    // Fetch recent transactions
     const transactions = await Transaction.find()
-      .sort({ transactionDate: -1 }) // Ascending order
+      .sort({ transactionDate: -1 })
       .limit(10)
       .populate('orderId', 'orderStatus')
       .populate('createdBy', 'name')
-      .populate('warehouseId', 'name');
+      .populate('warehouseId', 'name')
+      .lean();
 
-    return transactions;
+    // Normalize order transactions
+    const normalizedTransactions = transactions.map((t) => ({
+      _id: t._id,
+      type: 'order',
+      transactionDate: t.transactionDate,
+      orderId: t.orderId?._id || null,
+      orderStatus: t.orderId?.orderStatus || null,
+      paymentMethod: t.paymentMethod,
+      paymentStatus: t.paymentStatus,
+      createdBy: t.createdBy?.name || 'Unknown',
+      nameWarehouse: t.warehouseId?.name || 'Unknown',
+      amount: t.totalPrice || 0,
+      isdebited: t.isDebited || false,
+    }));
+
+    // Fetch recent partner payments
+    const partnerPayments = await BMWToPartnerPayment.find()
+      .sort({ transactionDate: -1 })
+      .limit(10)
+      .populate('warehouseId', 'name')
+      .lean();
+
+    // Normalize partner payments
+    const normalizedPartnerPayments = partnerPayments.map((p) => ({
+      _id: p._id,
+      type: 'partnerPayment',
+      transactionDate: p.transactionDate,
+      orderId: p.orderId || null,
+      orderStatus: null,
+      paymentMethod: p.paymentMethod || 'Manual/Auto',
+      paymentStatus: p.status,
+      createdBy: 'Admin',
+      nameWarehouse: p.warehouseId?.name || 'Unknown',
+      amount: p.totalPrice || 0,
+      isdebited: p.isDebited ?? true, // Default to debited if not defined
+    }));
+
+    // Combine and sort by transactionDate
+    const combined = [...normalizedTransactions, ...normalizedPartnerPayments]
+      .sort((a, b) => new Date(b.transactionDate) - new Date(a.transactionDate))
+      .slice(0, 10); // Keep only recent 10
+
+    return combined;
   } catch (error) {
     console.error('Error fetching recent transactions:', error);
     throw new Error('Failed to fetch recent transactions');
@@ -87,7 +147,6 @@ export const getAllTransactionsService = async ({
   sortOrder = 'desc',
   search,
 }) => {
-  // Construct filter based on query parameters
   const filter = {};
   if (search) {
     const searchRegex = new RegExp(search, 'i');
@@ -98,38 +157,142 @@ export const getAllTransactionsService = async ({
     ];
   }
 
-  // Calculate pagination
-  const pageNumber = parseInt(page, 10);
-  const limitNumber = parseInt(limit, 10);
-  const skip = (pageNumber - 1) * limitNumber;
-
-  // Fetch total count of transactions
-  const totalTransactions = await Transaction.countDocuments(filter);
-  if (totalTransactions === 0) throw new ApiError(404, 'No transactions found');
-
-  // Calculate total pages
-  const totalPages = Math.ceil(totalTransactions / limitNumber);
-
-  // Fetch transactions with filter, sorting, and pagination
+  // Fetch transactions from Transaction collection
   const transactions = await Transaction.find(filter)
-    .sort({ [sortBy]: sortOrder === 'desc' ? -1 : 1 })
-    .skip(skip)
-    .limit(limitNumber)
     .populate('orderId', 'orderStatus')
     .populate('createdBy', 'name')
-    .populate('warehouseId', 'name');
+    .populate('warehouseId', 'name')
+    .lean();
 
-  if (!transactions.length)
+  // Fetch partner payments from BMWToPartnerPayment collection
+  const partnerPayments = await BMWToPartnerPayment.find({})
+    .populate('warehouseId', 'name')
+    .lean();
+
+  // Normalize both datasets to the same format
+  const normalizedTransactions = transactions.map((t) => ({
+    _id: t._id,
+    type: 'order', // label for frontend
+    transactionDate: t.transactionDate,
+    orderId: t.orderId?._id || null,
+    orderStatus: t.orderId?.orderStatus || null,
+    paymentMethod: t.paymentMethod,
+    paymentStatus: t.paymentStatus,
+    createdBy: t.createdBy?.name || 'Unknown',
+    warehouseName: t.warehouseId?.name || 'Unknown',
+    amount: t.totalPrice || 0,
+    isdebited: t.isDebited || false,
+  }));
+
+  const normalizedPartnerPayments = partnerPayments.map((p) => ({
+    _id: p._id,
+    type: 'partnerPayment',
+    transactionDate: p.transactionDate,
+    orderId: p.orderId,
+    orderStatus: null,
+    paymentMethod: p.paymentMethod || 'Manual/Auto',
+    paymentStatus: p.status,
+    createdBy: 'Admin',
+    warehouseName: p.warehouseId || 'Unknown',
+    amount: p.totalPrice || 0,
+    isdebited: p.isDebited || true,
+  }));
+
+  // Combine both arrays
+  const combined = [...normalizedTransactions, ...normalizedPartnerPayments];
+
+  // Filter by search (if applicable)
+  let filtered = combined;
+  if (search) {
+    const searchRegex = new RegExp(search, 'i');
+    filtered = combined.filter(
+      (item) =>
+        searchRegex.test(item.paymentMethod) ||
+        searchRegex.test(item.paymentStatus) ||
+        (item.orderId && searchRegex.test(item.orderId.toString()))
+    );
+  }
+
+  if (!filtered.length)
     throw new ApiError(404, 'No transactions match the given criteria');
 
+  // Sort
+  const sorted = filtered.sort((a, b) => {
+    if (sortOrder === 'desc') {
+      return new Date(b[sortBy]) - new Date(a[sortBy]);
+    } else {
+      return new Date(a[sortBy]) - new Date(b[sortBy]);
+    }
+  });
+
+  // Paginate manually
+  const pageNumber = parseInt(page, 10);
+  const limitNumber = parseInt(limit, 10);
+  const totalTransactions = sorted.length;
+  const totalPages = Math.ceil(totalTransactions / limitNumber);
+  const paginated = sorted.slice(
+    (pageNumber - 1) * limitNumber,
+    pageNumber * limitNumber
+  );
+
   return {
-    transactions,
+    transactions: paginated,
     currentPage: pageNumber,
     limit: limitNumber,
     totalPages,
     totalTransactions,
   };
 };
+// export const getAllTransactionsService = async ({
+//   page = 1,
+//   limit = 10,
+//   sortBy = 'transactionDate',
+//   sortOrder = 'desc',
+//   search,
+// }) => {
+//   // Construct filter based on query parameters
+//   const filter = {};
+//   if (search) {
+//     const searchRegex = new RegExp(search, 'i');
+//     filter.$or = [
+//       { orderId: searchRegex },
+//       { paymentMethod: searchRegex },
+//       { paymentStatus: searchRegex },
+//     ];
+//   }
+
+//   // Calculate pagination
+//   const pageNumber = parseInt(page, 10);
+//   const limitNumber = parseInt(limit, 10);
+//   const skip = (pageNumber - 1) * limitNumber;
+
+//   // Fetch total count of transactions
+//   const totalTransactions = await Transaction.countDocuments(filter);
+//   if (totalTransactions === 0) throw new ApiError(404, 'No transactions found');
+
+//   // Calculate total pages
+//   const totalPages = Math.ceil(totalTransactions / limitNumber);
+
+//   // Fetch transactions with filter, sorting, and pagination
+//   const transactions = await Transaction.find(filter)
+//     .sort({ [sortBy]: sortOrder === 'desc' ? -1 : 1 })
+//     .skip(skip)
+//     .limit(limitNumber)
+//     .populate('orderId', 'orderStatus')
+//     .populate('createdBy', 'name')
+//     .populate('warehouseId', 'name');
+
+//   if (!transactions.length)
+//     throw new ApiError(404, 'No transactions match the given criteria');
+
+//   return {
+//     transactions,
+//     currentPage: pageNumber,
+//     limit: limitNumber,
+//     totalPages,
+//     totalTransactions,
+//   };
+// };
 
 // monthy payment of rent
 const razorpay = new Razorpay({
