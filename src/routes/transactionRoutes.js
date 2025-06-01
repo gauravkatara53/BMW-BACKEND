@@ -3,6 +3,8 @@ import {
   verifyTransaction,
   rentPayment,
   verifyTransactionRent,
+  allTransactionsToPartnerController,
+  getEarningStatsService,
 } from '../controllers/transactionController.js';
 import { verifyJWT } from '../middlewares/authUserMiddleware.js';
 import { verifyJWTPartner } from '../middlewares/authPartnerMiddleware.js';
@@ -35,4 +37,12 @@ router
   .route('/get/bank/detail/:partnerId')
   .get(verifyJWTAdmin, getBankDetailDataforAdmin);
 
+// transaction to partner from the bmw
+router
+  .route('/all/transaction/bmw/to/partner/')
+  .get(verifyJWTPartner, allTransactionsToPartnerController);
+
+router
+  .route('/get/partner/payment/stats')
+  .get(verifyJWTPartner, getEarningStatsService);
 export default router;
