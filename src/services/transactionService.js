@@ -378,29 +378,35 @@ export const getAllTransactionsofPartnerService = async ({
   sortOrder = 'desc',
   search,
 }) => {
-  const filter = { partner: partnerId }; // Filter by partner ID
+  const filter = { partner: partnerId };
+
+  // Step 1: MongoDB-level filtering on direct fields only
   if (search) {
     const searchRegex = new RegExp(search, 'i');
-    filter.$or = [
-      { orderId: searchRegex },
-      { paymentMethod: searchRegex },
-      { status: searchRegex },
-    ];
+
+    const orFilters = [{ paymentMethod: searchRegex }, { status: searchRegex }];
+
+    if (mongoose.Types.ObjectId.isValid(search)) {
+      orFilters.push({ _id: new mongoose.Types.ObjectId(search) });
+    }
+
+    filter.$or = orFilters;
   }
 
-  // Fetch partner payments
+  // Step 2: Query DB with safe filters
   const partnerPayments = await BMWToPartnerPayment.find(filter)
     .populate('warehouseId', 'name')
+    .populate('orderId', 'orderId')
     .lean();
 
-  // Normalize data
+  // Step 3: Normalize populated and computed fields
   const normalized = partnerPayments.map((p) => ({
-    _id: p._id,
+    _id: p._id.toString(),
     type: 'partnerPayment',
     transactionDate: p.transactionDate,
-    orderId: p.orderId,
-    orderStatus: null,
+    orderId: p.orderId?.orderId || '',
     paymentMethod: p.paymentMethod || 'Manual/Auto',
+    UTR: p.UTR || '',
     paymentStatus: p.status,
     createdBy: 'Admin',
     warehouseName: p.warehouseId?.name || 'Unknown',
@@ -408,30 +414,33 @@ export const getAllTransactionsofPartnerService = async ({
     isdebited: p.isDebited ?? true,
   }));
 
-  // Filter by search (if needed)
+  // Step 4: In-memory filtering on populated fields like orderId, warehouseName
   let filtered = normalized;
   if (search) {
     const searchRegex = new RegExp(search, 'i');
     filtered = normalized.filter(
       (item) =>
+        searchRegex.test(item._id) ||
         searchRegex.test(item.paymentMethod) ||
         searchRegex.test(item.paymentStatus) ||
-        (item.orderId && searchRegex.test(item.orderId.toString()))
+        searchRegex.test(item.orderId) ||
+        searchRegex.test(item.warehouseName)
     );
   }
 
+  // Step 5: Handle no results
   if (!filtered.length) {
     throw new ApiError(404, 'No transactions match the given criteria');
   }
 
-  // Sort
+  // Step 6: Sort
   const sorted = filtered.sort((a, b) => {
     return sortOrder === 'desc'
       ? new Date(b[sortBy]) - new Date(a[sortBy])
       : new Date(a[sortBy]) - new Date(b[sortBy]);
   });
 
-  // Pagination
+  // Step 7: Paginate
   const pageNumber = parseInt(page, 10);
   const limitNumber = parseInt(limit, 10);
   const totalTransactions = sorted.length;
@@ -441,6 +450,7 @@ export const getAllTransactionsofPartnerService = async ({
     pageNumber * limitNumber
   );
 
+  // Step 8: Return result
   return {
     transactions: paginated,
     currentPage: pageNumber,
@@ -449,5 +459,3 @@ export const getAllTransactionsofPartnerService = async ({
     totalTransactions,
   };
 };
-
-
