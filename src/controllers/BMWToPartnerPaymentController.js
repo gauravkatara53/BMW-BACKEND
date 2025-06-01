@@ -45,6 +45,7 @@ const BMWToPartnerPaymentController = asyncHandler(async (req, res) => {
       user: orderDetail.customerDetails,
       partner: orderDetail.partnerDetails,
       paymentMethod,
+      paymentStatus: 'Completed',
       UTR,
       notes,
       isDebited: true, // This is a payment to the partner,
