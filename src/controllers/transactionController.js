@@ -8,8 +8,10 @@ import {
   getRecentTransactionsService,
   getAllTransactionsService,
   rentPaymentService,
+  getAllTransactionsofPartnerService,
 } from '../services/transactionService.js';
 import { Warehouse } from '../models/warehouseModel.js';
+import { BMWToPartnerPayment } from '../models/BMWToPartnerPayment.js';
 
 export const verifyTransaction = asyncHandler(async (req, res) => {
   const { razorpayPaymentId, razorpayOrderId, razorpaySignature } = req.body;
@@ -359,4 +361,105 @@ export const verifyTransactionRent = asyncHandler(async (req, res) => {
     message: 'Payment verified successfully',
     payment,
   });
+});
+
+// controller for fetching all transactions to a partner
+export const allTransactionsToPartnerController = asyncHandler(
+  async (req, res) => {
+    const {
+      page = 1,
+      limit = 10,
+      sortBy = 'transactionDate',
+      sortOrder = 'desc',
+      search,
+    } = req.query;
+
+    try {
+      const partnerId = req.partner?._id;
+      if (!partnerId) {
+        throw new ApiError(401, 'Unauthorized: Partner ID not found');
+      }
+
+      const transactions = await getAllTransactionsofPartnerService({
+        partnerId,
+        page,
+        limit,
+        sortBy,
+        sortOrder,
+        search,
+      });
+
+      return res
+        .status(200)
+        .json(
+          new ApiResponse(
+            200,
+            transactions,
+            'Transactions fetched successfully'
+          )
+        );
+    } catch (error) {
+      if (error instanceof ApiError) {
+        return res
+          .status(error.statusCode)
+          .json(new ApiResponse(error.statusCode, error.message));
+      }
+      console.error(error);
+      return res.status(500).json(
+        new ApiResponse(500, 'An unexpected error occurred', {
+          error: error.message,
+        })
+      );
+    }
+  }
+);
+
+// eraning stats of partner
+
+import dayjs from 'dayjs';
+
+export const getEarningStatsService = asyncHandler(async (req, res) => {
+  const partnerId = req.partner?._id;
+  console.log(`Fetching earnings stats for partner ID: ${partnerId}`);
+  try {
+    // Fetch all partner payments
+    const partnerPayments = await BMWToPartnerPayment.find({
+      partner: partnerId,
+    })
+      .populate('warehouseId', 'name')
+      .lean();
+
+    // Current dates
+    const now = dayjs();
+    const startOfMonth = now.startOf('month');
+    const startOfWeek = now.startOf('week');
+
+    // Initialize totals
+    let totalEarnings = 0;
+    let thisMonthEarnings = 0;
+    let thisWeekEarnings = 0;
+
+    partnerPayments.forEach((payment) => {
+      const amount = payment.totalPrice || 0;
+      const paymentDate = dayjs(payment.createdAt); // assumes createdAt exists
+
+      totalEarnings += amount;
+
+      if (paymentDate.isAfter(startOfMonth)) {
+        thisMonthEarnings += amount;
+      }
+
+      if (paymentDate.isAfter(startOfWeek)) {
+        thisWeekEarnings += amount;
+      }
+    });
+
+    return res.json({
+      totalEarnings: Number(totalEarnings.toFixed(0)),
+      thisMonthEarnings: Number(thisMonthEarnings.toFixed(0)),
+      thisWeekEarnings: Number(thisWeekEarnings.toFixed(0)),
+    });
+  } catch (error) {
+    throw new ApiError(500, error.message);
+  }
 });

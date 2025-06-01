@@ -367,3 +367,87 @@ export const verifyRazorpaySignatureRent = (
     .digest('hex');
   return generatedSignature === razorpaySignature;
 };
+
+// transaction for the partner payment
+
+export const getAllTransactionsofPartnerService = async ({
+  partnerId,
+  page = 1,
+  limit = 10,
+  sortBy = 'transactionDate',
+  sortOrder = 'desc',
+  search,
+}) => {
+  const filter = { partner: partnerId }; // Filter by partner ID
+  if (search) {
+    const searchRegex = new RegExp(search, 'i');
+    filter.$or = [
+      { orderId: searchRegex },
+      { paymentMethod: searchRegex },
+      { status: searchRegex },
+    ];
+  }
+
+  // Fetch partner payments
+  const partnerPayments = await BMWToPartnerPayment.find(filter)
+    .populate('warehouseId', 'name')
+    .lean();
+
+  // Normalize data
+  const normalized = partnerPayments.map((p) => ({
+    _id: p._id,
+    type: 'partnerPayment',
+    transactionDate: p.transactionDate,
+    orderId: p.orderId,
+    orderStatus: null,
+    paymentMethod: p.paymentMethod || 'Manual/Auto',
+    paymentStatus: p.status,
+    createdBy: 'Admin',
+    warehouseName: p.warehouseId?.name || 'Unknown',
+    amount: p.totalPrice || 0,
+    isdebited: p.isDebited ?? true,
+  }));
+
+  // Filter by search (if needed)
+  let filtered = normalized;
+  if (search) {
+    const searchRegex = new RegExp(search, 'i');
+    filtered = normalized.filter(
+      (item) =>
+        searchRegex.test(item.paymentMethod) ||
+        searchRegex.test(item.paymentStatus) ||
+        (item.orderId && searchRegex.test(item.orderId.toString()))
+    );
+  }
+
+  if (!filtered.length) {
+    throw new ApiError(404, 'No transactions match the given criteria');
+  }
+
+  // Sort
+  const sorted = filtered.sort((a, b) => {
+    return sortOrder === 'desc'
+      ? new Date(b[sortBy]) - new Date(a[sortBy])
+      : new Date(a[sortBy]) - new Date(b[sortBy]);
+  });
+
+  // Pagination
+  const pageNumber = parseInt(page, 10);
+  const limitNumber = parseInt(limit, 10);
+  const totalTransactions = sorted.length;
+  const totalPages = Math.ceil(totalTransactions / limitNumber);
+  const paginated = sorted.slice(
+    (pageNumber - 1) * limitNumber,
+    pageNumber * limitNumber
+  );
+
+  return {
+    transactions: paginated,
+    currentPage: pageNumber,
+    limit: limitNumber,
+    totalPages,
+    totalTransactions,
+  };
+};
+
+
