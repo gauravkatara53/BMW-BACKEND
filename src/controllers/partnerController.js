@@ -43,9 +43,9 @@ const logoutPartner = asyncHandler(async (req, res) => {
   await logoutPartnerService(partnerId); // Call the service to handle logout logic
 
   const options = {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production', // Set to true in production
-    sameSite: 'None', // or 'Lax' depending on your needs
+    httpOnly: false,
+    secure: false, // Set to true in production
+    sameSite: 'Lax', // or 'Lax' depending on your needs
     path: '/', // Ensure the cookie is available on the entire site
   };
 

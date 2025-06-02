@@ -459,3 +459,4 @@ export const getAllTransactionsofPartnerService = async ({
     totalTransactions,
   };
 };
+
