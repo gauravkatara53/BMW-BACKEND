@@ -2,7 +2,7 @@ import { uploadOnCloudinary } from '../utils/cloudinary.js';
 import { Partner } from '../models/partnerModel.js';
 import { ApiError } from '../utils/ApiError.js';
 import jwt from 'jsonwebtoken';
-import { Warehouse } from '../models/warehouseModel.js';
+// import { Warehouse } from '../models/warehouseModel.js';
 
 const generateAccessAndRefereshTokens = async (partnerId) => {
   try {
