@@ -13,7 +13,11 @@ const uploadKycService = async (req) => {
       'All fields (name, document type, document number) are required.'
     );
   }
-
+  console.log('Received KYC upload request:', {
+    nameOnDocument,
+    documentType,
+    documentNumber,
+  });
   // Check if KYC already exists for this partner
   const existingKyc = await KYC.findOne({ partner: req.partner._id });
   if (existingKyc) {
