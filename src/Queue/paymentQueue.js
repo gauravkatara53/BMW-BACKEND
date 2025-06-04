@@ -30,7 +30,12 @@ agenda.define('processPaymentStatus', async (job) => {
     ) {
       await Order.updateOne(
         { _id: orderId, 'monthlyPayment._id': transaction.monthRentId },
-        { $set: { 'monthlyPayment.$.paymentStatus': 'Unpaid' } },
+        {
+          $set: {
+            'monthlyPayment.$.paymentStatus': 'Unpaid',
+            orderStatus: 'Failed',
+          },
+        },
         { session }
       );
 
