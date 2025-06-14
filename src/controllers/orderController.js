@@ -14,6 +14,8 @@ import {
 } from '../services/orderService.js';
 import { Order } from '../models/orderModel.js';
 
+import { io } from '../index.js';
+
 const createOrder = asyncHandler(async (req, res) => {
   const { id: warehouseId } = req.params;
   console.log('Warehouse ID:', req.params.id);
@@ -22,20 +24,7 @@ const createOrder = asyncHandler(async (req, res) => {
 
   const session = await mongoose.startSession();
   session.startTransaction();
-  const ordinalMonths = [
-    'First',
-    'Second',
-    'Third',
-    'Fourth',
-    'Fifth',
-    'Sixth',
-    'Seventh',
-    'Eighth',
-    'Ninth',
-    'Tenth',
-    'Eleventh',
-    'Twelfth',
-  ];
+
   let transactionCommitted = false;
 
   try {
@@ -70,10 +59,20 @@ const createOrder = asyncHandler(async (req, res) => {
     await session.commitTransaction();
     transactionCommitted = true;
 
+    // Populate the created order
     const populatedOrder = await Order.findById(order._id)
       .populate('WarehouseDetail', 'name location paymentDueDays')
       .populate('customerDetails', 'name email phone address')
       .populate('partnerDetails', 'name email phone address');
+
+    // Emit real-time notification
+    io.emit('notify', {
+      message: `New ${warehouse.rentOrSell} order created!`,
+      orderId: populatedOrder._id,
+      type: 'booking',
+      userId: populatedOrder.customerDetails._id,
+      partnerId: populatedOrder.partnerDetails._id,
+    });
 
     return res.status(201).json(
       new ApiResponse(

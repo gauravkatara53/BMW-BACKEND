@@ -36,9 +36,10 @@
     "nodemailer": "^6.10.0",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
-    "pm2": "^5.4.3",
+    "pm2": "^6.0.8",
     "razorpay": "^2.9.5",
     "redis": "^4.7.0",
+    "socket.io": "^4.8.1",
     "validator": "^13.12.0"
   },
   "devDependencies": {

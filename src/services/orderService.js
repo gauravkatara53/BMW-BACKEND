@@ -240,7 +240,7 @@ const getAllUserOrdersService = async ({
           { 'partnerDetails.name': searchRegex },
           { 'partnerDetails.email': searchRegex },
           { 'partnerDetails.phone': searchRegex },
-          { 'orderId': searchRegex },
+          { orderId: searchRegex },
         ],
       },
     });
