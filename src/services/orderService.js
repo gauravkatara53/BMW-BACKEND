@@ -9,6 +9,7 @@ const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
   key_secret: process.env.RAZORPAY_KEY_SECRET,
 });
+import { getCache, setCache, deleteCache } from '../utils/cache.js'; // adjust the path if needed
 
 const createOrderService = async (warehouseId, duration, user, session) => {
   const warehouse = await Warehouse.findById(warehouseId);
@@ -291,54 +292,58 @@ const getAllUserOrdersService = async ({
 };
 
 const getOrderDetailService = async (orderId) => {
-  // Log the incoming Order ID
   console.log('Received Order ID:', orderId);
 
-  // Validate the Order ID format
+  const cacheKey = `order-detail-${orderId}`;
+
+  // ✅ 1. Check if data is in cache
+  const cached = getCache(cacheKey);
+  if (cached) {
+    console.log('✅ Order detail returned from cache');
+    return cached;
+  }
+
+  // ✅ 2. Validate ObjectId
   const isValidObjectId = mongoose.Types.ObjectId.isValid(orderId);
   if (!isValidObjectId) {
     throw new ApiError(400, 'Invalid Order ID format');
   }
 
-  // Fetch the order with populated WarehouseDetail
-  const order = await Order.findById(orderId)
-    .populate(
-      'WarehouseDetail'
-
-      // 'name location partnerName WarehouseStatus address city pincode state country'
-    )
+  // ✅ 3. Fetch order with all necessary population
+  const orderDoc = await Order.findById(orderId)
+    .populate('WarehouseDetail')
     .populate('transactionDetails', 'paymentStatus transactionDate')
     .populate('partnerDetails', 'name avatar')
     .populate('customerDetails', 'name phone');
 
-  // Log the fetched order details for debugging
-  console.log('Fetched Order:', order);
-
-  // Handle case when the order is not found
-  if (!order) {
-    console.error(`Order not found for ID: ${orderId}`);
+  if (!orderDoc) {
     throw new ApiError(404, 'Order not found');
   }
 
-  // Handle case when referenced details are missing
-  if (!order.WarehouseDetail) {
-    console.error(`Warehouse details not found for Order ID: ${orderId}`);
+  if (!orderDoc.WarehouseDetail) {
     throw new ApiError(404, 'Warehouse details not found');
   }
 
-  // Fetch the transaction details using the orderId
-  const transaction = await Transaction.findOne({ orderId }).select(
+  // ✅ 4. Fetch transaction
+  const transactionDoc = await Transaction.findOne({ orderId }).select(
     'transactionId transactionDate totalPrice paymentStatus razorpayOrderId razorpayPaymentId razorpaySignature'
   );
 
-  // Handle case when transaction details are missing
-  if (!transaction) {
-    console.error(`Transaction details not found for Order ID: ${orderId}`);
+  if (!transactionDoc) {
     throw new ApiError(404, 'Transaction details not found');
   }
 
-  // Return the order along with transaction details
-  return { order, transaction };
+  // ✅ 5. Convert to plain JS objects
+  const order = orderDoc.toObject();
+  const transaction = transactionDoc.toObject();
+
+  const responseData = { order, transaction };
+
+  // ✅ 6. Save to cache (TTL: 10 minutes)
+  setCache(cacheKey, responseData, 600);
+
+  // ✅ 7. Return data
+  return responseData;
 };
 
 const getAllWarehouseOrdersService = async ({

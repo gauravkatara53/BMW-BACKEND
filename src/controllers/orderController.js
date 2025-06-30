@@ -13,8 +13,7 @@ import {
   getRecentOrderService,
 } from '../services/orderService.js';
 import { Order } from '../models/orderModel.js';
-
-import { io } from '../index.js';
+import { getCache, setCache, deleteCache } from '../utils/cache.js'; // adjust the path if needed
 
 const createOrder = asyncHandler(async (req, res) => {
   const { id: warehouseId } = req.params;
@@ -46,6 +45,13 @@ const createOrder = asyncHandler(async (req, res) => {
         'Duration is not allowed for selling a warehouse'
       );
     }
+    // 🔁 Inline version of deleteUserOrderCaches
+    const keyListKey = `user-orders-keys-${userId}`;
+    const keys = cache.get(keyListKey);
+    if (Array.isArray(keys)) {
+      keys.forEach((key) => cache.del(key));
+      cache.del(keyListKey);
+    }
 
     // Call the service to create the order
     const { order, razorpayOrder, transaction } = await createOrderService(
@@ -64,15 +70,6 @@ const createOrder = asyncHandler(async (req, res) => {
       .populate('WarehouseDetail', 'name location paymentDueDays')
       .populate('customerDetails', 'name email phone address')
       .populate('partnerDetails', 'name email phone address');
-
-    // Emit real-time notification
-    io.emit('notify', {
-      message: `New ${warehouse.rentOrSell} order created!`,
-      orderId: populatedOrder._id,
-      type: 'booking',
-      userId: populatedOrder.customerDetails._id,
-      partnerId: populatedOrder.partnerDetails._id,
-    });
 
     return res.status(201).json(
       new ApiResponse(
@@ -111,9 +108,32 @@ const getAllOrderUser = async (req, res, next) => {
       endDate,
       rentOrSell,
     } = req.query;
+
     const { _id: userId } = req.user;
 
-    // Call the service function and pass parameters
+    // 🔑 Build a unique cache key
+    const cacheKey = `user-orders-${userId}-${JSON.stringify({
+      page,
+      limit,
+      sortBy,
+      sortOrder,
+      searchTerm,
+      orderStatus,
+      warehouseId,
+      startDate,
+      endDate,
+      rentOrSell,
+    })}`;
+
+    // 1. ✅ Try fetching from cache
+    const cachedData = getCache(cacheKey);
+    if (cachedData) {
+      return res
+        .status(200)
+        .json(new ApiResponse(200, cachedData, 'Orders fetched (cached)'));
+    }
+
+    // 2. ❌ Not in cache → call service
     const { orders, currentPage, totalPages, totalOrders } =
       await getAllUserOrdersService({
         userId,
@@ -129,40 +149,44 @@ const getAllOrderUser = async (req, res, next) => {
         rentOrSell,
       });
 
-    // Send success response
-    return res.status(200).json(
-      new ApiResponse(
-        200,
-        {
-          orders,
-          currentPage,
-          limit,
-          totalPages,
-          totalOrders,
-        },
-        'Orders fetched successfully'
-      )
-    );
+    const responseData = {
+      orders,
+      currentPage,
+      limit,
+      totalPages,
+      totalOrders,
+    };
+
+    // 3. 💾 Cache the result (TTL = 5 minutes)
+    setCache(cacheKey, responseData, 300);
+
+    // 4. ✅ Send response
+    return res
+      .status(200)
+      .json(new ApiResponse(200, responseData, 'Orders fetched successfully'));
   } catch (error) {
-    next(error); // Pass to error-handling middleware
+    next(error);
   }
 };
 
 const getOrderDetail = async (req, res, next) => {
   try {
-    const { orderId } = req.params; // Extract orderId from request parameters
-    console.log(orderId);
-    // Fetch order details using the service
-    const order = await getOrderDetailService(orderId);
+    const { orderId } = req.params;
 
-    // Send success response
+    // Fetch order + transaction (from service that includes caching)
+    const { order, transaction } = await getOrderDetailService(orderId);
+
     return res
       .status(200)
       .json(
-        new ApiResponse(200, { order }, 'Order details fetched successfully')
+        new ApiResponse(
+          200,
+          { order, transaction },
+          'Order details fetched successfully'
+        )
       );
   } catch (error) {
-    next(error); // Pass errors to the error-handling middleware
+    next(error);
   }
 };
 

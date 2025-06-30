@@ -11,6 +11,7 @@ import {
 } from '../services/UserService.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { User } from '../models/userModel.js';
+import { getCache, setCache, deleteCache } from '../utils/cache.js'; // adjust the path if needed
 
 const registerUser = asyncHandler(async (req, res) => {
   const createdUser = await registerUserService(req);
@@ -33,32 +34,44 @@ const loginUser = asyncHandler(async (req, res) => {
 });
 
 const isAuthenticatedOrNot = asyncHandler(async (req, res) => {
-  res.status(200).json({ message: 'User is authenticated', user: req.user });
+  const userId = req.user?._id;
+  const cacheKey = `auth-user-${userId}`;
+
+  let userData = getCache(cacheKey);
+
+  if (!userData) {
+    userData = req.user;
+    setCache(cacheKey, userData, 7 * 24 * 60 * 60); // 7 days TTL in seconds
+  }
+
+  res.status(200).json({
+    message: 'User is authenticated',
+    user: userData,
+  });
 });
 
 const logoutUser = asyncHandler(async (req, res) => {
-  const userId = req.userId; // Assuming userId is set somewhere (middleware or JWT)
+  const userId = req.userId; // Make sure this is set from JWT middleware
 
-  await logoutUserService(userId); // Call the service to handle logout logic
+  await logoutUserService(userId); // Any backend session/token cleanup
 
-  // const options = {
-  //   httpOnly: true,
-  //   secure: process.env.NODE_ENV === 'production', // Set to true in production
-  //   sameSite: 'None', // or 'Lax' depending on your needs
-  //   path: '/', // Ensure the cookie is available on the entire site
-  // };
+  // 🧹 Invalidate all user-related caches
+  deleteCache(`auth-user-${userId}`);
+  deleteCache(`profile-user-${userId}`);
+
+  // Clear cookies
   const options = {
-    httpOnly: false, // Useful for testing and accessing cookies in the frontend
-    secure: false, // Should be false in local development; use true in production
-    sameSite: 'Lax', // Change to 'None' if your frontend and backend are on different domains/ports
-    path: '/', // Available for the entire domain
+    httpOnly: false,
+    secure: false,
+    sameSite: 'Lax',
+    path: '/',
   };
 
   return res
     .status(200)
-    .clearCookie('accessToken', options) // Clear the cookies
+    .clearCookie('accessToken', options)
     .clearCookie('refreshToken', options)
-    .json(new ApiResponse(200, {}, 'User logged out successfully')); // Send response in consistent format
+    .json(new ApiResponse(200, {}, 'User logged out successfully'));
 });
 
 const refreshAccessToken = asyncHandler(async (req, res) => {
@@ -106,13 +119,30 @@ const changeCurrentPassword = asyncHandler(async (req, res) => {
 });
 
 const getCurrentUser = asyncHandler(async (req, res) => {
+  const userId = req.user?._id;
+  const cacheKey = `profile-user-${userId}`;
+
+  let user = getCache(cacheKey);
+
+  if (!user) {
+    // Only cache safe user data (like what req.user contains)
+    user = req.user;
+    setCache(cacheKey, user, 7 * 24 * 60 * 60); // Cache for 7 days
+  }
+
   return res
     .status(200)
-    .json(new ApiResponse(200, req.user, 'User fetched successfully'));
+    .json(new ApiResponse(200, user, 'User fetched successfully'));
 });
 
 const updateAccountDetails = asyncHandler(async (req, res) => {
-  const updatedUser = await updateAccountDetailsService(req); // Pass `req` to the service
+  const updatedUser = await updateAccountDetailsService(req);
+
+  // Invalidate both auth and profile caches
+  const userId = req.user?._id || updatedUser?._id;
+  deleteCache(`profile-user-${userId}`);
+  deleteCache(`auth-user-${userId}`);
+
   return res
     .status(200)
     .json(
@@ -127,6 +157,9 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
   // Call the service to update the avatar
   const user = await updateUserAvatarService(userId, avatarLocalPath);
 
+  // Invalidate both auth and profile caches
+  deleteCache(`profile-user-${userId}`);
+  deleteCache(`auth-user-${userId}`);
   // Respond with success
   return res
     .status(200)
