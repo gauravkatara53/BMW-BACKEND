@@ -15,6 +15,7 @@ import { Warehouse } from '../models/warehouseModel.js';
 import { Partner } from '../models/partnerModel.js';
 import { User } from '../models/userModel.js';
 import { Order } from '../models/orderModel.js';
+import { getCache, setCache } from '../utils/cache.js';
 
 const createWarehouse = asyncHandler(async (req, res) => {
   const createdWarehouse = await createWarehouseService(req); // Remove res from here
@@ -28,9 +29,11 @@ const createWarehouse = asyncHandler(async (req, res) => {
       )
     );
 });
+
 const uploadImageController = asyncHandler(async (req, res) => {
   await uploadImageService(req, res);
 });
+
 const deleteWarehouseDetailController = asyncHandler(async (req, res) => {
   const { id } = req.params; // Extract the ID from params
 
@@ -42,16 +45,38 @@ const deleteWarehouseDetailController = asyncHandler(async (req, res) => {
       new ApiResponse(200, deletedWarehouse, 'Warehouse deleted successfully.')
     );
 });
-const getWarehouseDetailController = asyncHandler(async (req, res) => {
-  const getWarehouse = await getWarehouseDetail(req); // Call the service with the ID
 
+// get warehouse after adding cache
+const getWarehouseDetailController = asyncHandler(async (req, res) => {
+  const warehouseId = req.params.id || req.query.id || req.body.id;
+
+  if (!warehouseId) {
+    throw new ApiError(400, 'Warehouse ID is required.');
+  }
+
+  const cacheKey = `warehouse-detail-${warehouseId}`;
+
+  // 1. Try cache
+  let warehouseData = getCache(cacheKey);
+
+  if (!warehouseData) {
+    // 2. Fetch if not cached
+    const warehouseDoc = await getWarehouseDetail(req); // Mongoose document
+
+    // ✅ 3. Convert to plain object to prevent clone error
+    warehouseData = warehouseDoc.toObject();
+
+    // 4. Store in cache (10 min)
+    setCache(cacheKey, warehouseData, 600);
+  }
+
+  // 5. Return response
   return res
     .status(200)
     .json(
-      new ApiResponse(200, getWarehouse, 'Warehouse feteched successfully.')
+      new ApiResponse(200, warehouseData, 'Warehouse fetched successfully.')
     );
 });
-
 
 const changeWarehouseStatusController = asyncHandler(async (req, res) => {
   // Call the service with the entire request object
