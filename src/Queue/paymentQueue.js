@@ -4,6 +4,7 @@ import { Order } from '../models/orderModel.js';
 import { Warehouse } from '../models/warehouseModel.js';
 import { Transaction } from '../models/transactionModel.js';
 import { ApiError } from '../utils/ApiError.js';
+import sendBookingConfirmationEmails from '../helper/sendBookingEmails.js';
 
 agenda.define('processPaymentStatus', async (job) => {
   const { orderId, warehouseId, transactionId } = job.attrs.data;
@@ -30,11 +31,11 @@ agenda.define('processPaymentStatus', async (job) => {
       `🏢 Order Type: ${order.monthlyPayment?.length > 0 ? 'Rent' : 'Sell'}`
     );
 
+    // ✅ Case 1: Payment Failed or Still Pending
     if (
       transaction.paymentStatus === 'Pending' ||
       transaction.paymentStatus === 'Failed'
     ) {
-      // ✅ Always mark order as failed
       await Order.findByIdAndUpdate(
         orderId,
         { orderStatus: 'Failed' },
@@ -42,7 +43,7 @@ agenda.define('processPaymentStatus', async (job) => {
       );
       console.log(`❗ Order ${orderId} marked as Failed`);
 
-      // ✅ Conditionally update monthly payment for Rent orders
+      // For rent, update monthly payment as unpaid
       if (order.monthlyPayment?.length > 0 && transaction.monthRentId) {
         const paymentUpdateResult = await Order.updateOne(
           { _id: orderId, 'monthlyPayment._id': transaction.monthRentId },
@@ -59,7 +60,7 @@ agenda.define('processPaymentStatus', async (job) => {
         );
       }
 
-      // ✅ Update warehouse status
+      // Mark warehouse available again
       await Warehouse.findByIdAndUpdate(
         warehouseId,
         { WarehouseStatus: 'Available' },
@@ -67,14 +68,48 @@ agenda.define('processPaymentStatus', async (job) => {
       );
       console.log(`📦 Warehouse ${warehouseId} marked as Available`);
 
-      // ✅ Update transaction status
+      // Mark transaction failed
       await Transaction.findByIdAndUpdate(
         transactionId,
         { paymentStatus: 'Failed' },
         { session }
       );
       console.log(`💳 Transaction ${transactionId} marked as Failed`);
-    } else {
+    }
+
+    // ✅ Case 2: Payment Success – Send Confirmation Email
+    else if (transaction.paymentStatus === 'Success') {
+      console.log(`📩 Sending booking confirmation emails`);
+
+      try {
+        const user = await mongoose
+          .model('User')
+          .findById(order.customerDetails)
+          .lean();
+
+        const partner = await mongoose
+          .model('Partner')
+          .findOne({ name: warehouse.partnerName })
+          .lean();
+
+        await sendBookingConfirmationEmails({
+          user,
+          partner,
+          warehouse,
+          bookingId: order.orderId,
+          bookingDate: order.orderDate.toDateString(),
+          duration: order.duration,
+          totalPrice: order.totalPrice,
+        });
+
+        console.log(`✅ Emails sent to user and partner`);
+      } catch (emailError) {
+        console.error(`❌ Failed to send booking emails:`, emailError.message);
+      }
+    }
+
+    // ✅ Case 3: Transaction is already successful or marked
+    else {
       console.log(
         `✅ Transaction status is already ${transaction.paymentStatus}, no action taken.`
       );

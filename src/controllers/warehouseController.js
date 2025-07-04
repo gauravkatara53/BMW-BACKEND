@@ -15,7 +15,7 @@ import { Warehouse } from '../models/warehouseModel.js';
 import { Partner } from '../models/partnerModel.js';
 import { User } from '../models/userModel.js';
 import { Order } from '../models/orderModel.js';
-import { getCache, setCache } from '../utils/cache.js';
+import { getCache, setCache, deleteCache } from '../utils/cache.js';
 
 const createWarehouse = asyncHandler(async (req, res) => {
   const createdWarehouse = await createWarehouseService(req); // Remove res from here
@@ -32,6 +32,13 @@ const createWarehouse = asyncHandler(async (req, res) => {
 
 const uploadImageController = asyncHandler(async (req, res) => {
   await uploadImageService(req, res);
+
+  // ✅ Invalidate cache
+  const warehouseId = req.params.id || req.body.id || req.query.id;
+  if (warehouseId) {
+    deleteCache(`warehouse-detail-${warehouseId}`);
+    console.log(`Cache cleared: warehouse-detail-${warehouseId}`);
+  }
 });
 
 const deleteWarehouseDetailController = asyncHandler(async (req, res) => {

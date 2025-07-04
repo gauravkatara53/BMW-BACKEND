@@ -13,7 +13,7 @@ import {
   getRecentOrderService,
 } from '../services/orderService.js';
 import { Order } from '../models/orderModel.js';
-import { getCache, setCache, deleteCache } from '../utils/cache.js'; // adjust the path if needed
+import { getCache, setCache } from '../utils/cache.js'; // adjust the path if needed
 
 const createOrder = asyncHandler(async (req, res) => {
   const { id: warehouseId } = req.params;
@@ -46,11 +46,12 @@ const createOrder = asyncHandler(async (req, res) => {
       );
     }
     // 🔁 Inline version of deleteUserOrderCaches
+    const userId = req.user._id; // Add this line before using it
     const keyListKey = `user-orders-keys-${userId}`;
-    const keys = cache.get(keyListKey);
+    const keys = getCache(keyListKey);
     if (Array.isArray(keys)) {
-      keys.forEach((key) => cache.del(key));
-      cache.del(keyListKey);
+      keys.forEach((key) => deleteCache(key));
+      deleteCache(keyListKey);
     }
 
     // Call the service to create the order
